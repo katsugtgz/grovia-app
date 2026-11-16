@@ -80,6 +80,10 @@ describe('lib/template-core — Core Shell & Template Logic', () => {
       expect(escapeHTML(0)).toBe('0');
       expect(escapeHTML(false)).toBe('false');
     });
+
+    it('safely handles prototype-less objects like Object.create(null) without throwing', () => {
+      expect(escapeHTML(Object.create(null))).toBe('');
+    });
   });
 
   describe('portraitURL', () => {
@@ -184,6 +188,49 @@ describe('lib/template-core — Core Shell & Template Logic', () => {
 
     it('generateAvatarSvg alias matches no()', () => {
       expect(generateAvatarSvg()).toBe(no());
+    });
+
+    it('safely handles prototype property lookups like __proto__ and toString', () => {
+      // Prototype lookup '__proto__' must not throw TypeError and must return valid SVG
+      expect(() => no({ hair: '__proto__' as any })).not.toThrow();
+      const protoSvg = no({ hair: '__proto__' as any });
+      expect(protoSvg).toContain('<svg viewBox="0 0 64 64"');
+      expect(protoSvg).not.toContain('[object Object]');
+
+      // Prototype lookup 'toString' must not inject '[object Object]' into SVG body
+      expect(() => no({ hair: 'toString' as any })).not.toThrow();
+      const toStringSvg = no({ hair: 'toString' as any });
+      expect(toStringSvg).toContain('<svg viewBox="0 0 64 64"');
+      expect(toStringSvg).not.toContain('[object Object]');
+
+      // Other prototype properties fall back cleanly without throw or corruption
+      expect(() => no({ hair: 'valueOf' as any })).not.toThrow();
+      expect(no({ hair: 'valueOf' as any })).not.toContain('[object Object]');
+      expect(() => no({ hair: 'constructor' as any })).not.toThrow();
+      expect(no({ hair: 'constructor' as any })).not.toContain('[object Object]');
+    });
+
+    it('validates and sanitizes bgColor to prevent raw attribute injection into SVG rect', () => {
+      // Attribute breakout with script tag falls back to default var(--av)
+      const xssSvg = no(null, '"><script>alert(1)</script>');
+      expect(xssSvg).not.toContain('<script>');
+      expect(xssSvg).toContain('fill="var(--av)"');
+
+      // Valid hex color is preserved
+      const hexSvg = no(null, '#cfe0c8');
+      expect(hexSvg).toContain('fill="#cfe0c8"');
+
+      // Valid CSS variable pattern is preserved
+      const varSvg = no(null, 'var(--custom-bg)');
+      expect(varSvg).toContain('fill="var(--custom-bg)"');
+
+      // Malformed CSS variable falls back to default
+      const badVarSvg = no(null, 'var(--bad; background: red)');
+      expect(badVarSvg).toContain('fill="var(--av)"');
+
+      // Prototype-less object or non-string bgColor falls back safely
+      expect(no(null, Object.create(null) as any)).toContain('fill="var(--av)"');
+      expect(no(null, 99999 as any)).toContain('fill="var(--av)"');
     });
   });
 

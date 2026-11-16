@@ -24,7 +24,13 @@ export function normalizeView(value: unknown): ViewType {
  */
 export function escapeHTML(value: unknown): string {
   if (value === null || value === undefined) return '';
-  return String(value).replace(/[&<>"']/g, (char) => {
+  let str: string;
+  try {
+    str = String(value);
+  } catch {
+    return '';
+  }
+  return str.replace(/[&<>"']/g, (char) => {
     switch (char) {
       case '&': return '&amp;';
       case '<': return '&lt;';
@@ -138,6 +144,16 @@ const topHairline = (c: string) =>
  * Exactly replicates reference template function `no(look)`.
  */
 export function no(look?: Partial<AppearanceConfig> | null, bgColor: string = 'var(--av)'): string {
+  let safeBg = 'var(--av)';
+  try {
+    safeBg =
+      isHexColor(bgColor) || /^var\(--[\w-]+\)$/.test(String(bgColor).trim())
+        ? String(bgColor).trim()
+        : 'var(--av)';
+  } catch {
+    safeBg = 'var(--av)';
+  }
+
   const conf: AppearanceConfig = look
     ? {
         skin: safeColor(look.skin, DEFAULT_APPEARANCE.skin),
@@ -150,7 +166,9 @@ export function no(look?: Partial<AppearanceConfig> | null, bgColor: string = 'v
     : DEFAULT_APPEARANCE;
 
   const hairKey = (conf.hair as HairStyle) || 'bob';
-  const hairShape = hairStyles[hairKey]?.(conf.hc) || '';
+  const hairShape = Object.prototype.hasOwnProperty.call(hairStyles, hairKey)
+    ? hairStyles[hairKey](conf.hc)
+    : '';
   const hairline = ['afro', 'curly', 'coils'].includes(hairKey) ? '' : topHairline(conf.hc);
 
   const beardPath = conf.beard
@@ -162,7 +180,7 @@ export function no(look?: Partial<AppearanceConfig> | null, bgColor: string = 'v
     : '';
 
   return `<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-    <rect width="64" height="64" fill="${bgColor}"/>
+    <rect width="64" height="64" fill="${safeBg}"/>
     ${hairShape}
     <path fill="${conf.shirt}" d="M11 64c0-12 8.5-19.5 21-19.5S53 52 53 64z"/>
     <path fill="${conf.skin}" d="M28 37h8v8.5c0 2.2-1.8 3.5-4 3.5s-4-1.3-4-3.5z"/>

@@ -36,7 +36,7 @@ export interface AppearanceConfig {
 // Personnel & Roster Types
 // ==========================================
 
-export type PersonStatus = 'Active' | 'On leave' | 'Invited';
+export type PersonStatus = 'Active' | 'On leave' | 'Invited' | 'Away' | 'New' | string;
 
 export interface Person {
   id: string;
@@ -195,7 +195,7 @@ export interface WaitlistResponse {
   position: number;
 }
 
-export type InquiryStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+export type InquiryStatus = 'new' | 'open' | 'in_progress' | 'resolved' | 'closed';
 export type InquiryPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface InquiryRequest {

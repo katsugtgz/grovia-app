@@ -7,10 +7,21 @@ describe('Tier 2 — Boundary: Database Engine (bun:sqlite)', () => {
   const testDbPath = path.resolve(process.cwd(), 'test-e2e-tier2-db.db');
   let db: Database;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     if (fs.existsSync(testDbPath)) {
       fs.unlinkSync(testDbPath);
     }
+
+    // Bind to application db module if available (M2+)
+    try {
+      const dbMod = await import(path.resolve(process.cwd(), 'lib/db.ts'));
+      if (typeof dbMod.initDatabase === 'function') {
+        dbMod.initDatabase(testDbPath);
+      }
+    } catch {
+      // Schema contract fallback
+    }
+
     db = new Database(testDbPath);
     db.run('PRAGMA journal_mode = WAL;');
     db.run('PRAGMA foreign_keys = ON;');

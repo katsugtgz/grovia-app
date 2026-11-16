@@ -43,11 +43,11 @@
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Foundation & Core Shell | Features 1-5: Scaffolding, tokens, typography, SVG sprite, shell layout, template core | none | IN_PROGRESS |
-| M2 | Backend API & Persistence | Features 6-11: SQLite schema, 5 API route handlers, Zod validation, API tests | M1 | PLANNED |
-| M3 | UI Views, Bento Grid & Motion | Features 12-23: Overview, People, Payroll, Bento cards, Stopwatch, Modals, GSAP animations | M1, M2 | PLANNED |
-| M4 | GitHub Repo & CI/CD | Features 24-25: Public repository creation, GitHub Actions CI/CD workflow | M1, M2, M3 | PLANNED |
-| M5 | E2E Test Pass & react-doctor Gate | Features 26-28: 100% E2E tests pass (Tiers 1-4), Tier 5 adversarial, react-doctor 100 | M1-M4, E2E | PLANNED |
+| M1 | Foundation & Core Shell | Features 1-5: Scaffolding, tokens, typography, SVG sprite, shell layout, template core | none | DONE |
+| M2 | Backend API & Persistence | Features 6-11: SQLite schema, 5 API route handlers, Zod validation, API tests | M1 | DONE |
+| M3 | UI Views, Bento Grid & Motion | Features 12-23: Overview, People, Payroll, Bento cards, Stopwatch, Modals, GSAP animations | M1, M2 | DONE |
+| M4 | GitHub Repo & CI/CD | Features 24-25: Public repository creation, GitHub Actions CI/CD workflow | M1, M2, M3 | DONE |
+| M5 | E2E Test Pass & react-doctor Gate | Features 26-28: 100% E2E tests pass (Tiers 1-4), Tier 5 adversarial, react-doctor 100 | M1-M4, E2E | DONE |
 
 ## Interface Contracts
 

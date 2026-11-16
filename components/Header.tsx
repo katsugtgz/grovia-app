@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef } from 'react';
+import gsap from 'gsap';
 import type { ViewType } from '@/lib/types';
 import { Icon } from '@/components/ui/Icon';
+import { $, isReducedMotion } from '@/lib/motion';
 
 export interface HeaderProps {
   activeView: ViewType;
@@ -30,36 +32,92 @@ export function Header({
   const capLRef = useRef<HTMLElement>(null);
   const midRef = useRef<HTMLElement>(null);
   const capRRef = useRef<HTMLElement>(null);
+  const bellBtnRef = useRef<HTMLButtonElement>(null);
 
-  // Synchronize sliding indicator pill position
-  const updatePillPosition = useCallback(() => {
-    if (!tabsNavRef.current || !pillRef.current) return;
-    const activeBtn = tabsNavRef.current.querySelector<HTMLButtonElement>(`button[data-view="${activeView}"]`);
-    if (!activeBtn) return;
+  // Synchronize sliding indicator pill position with direction-aware GSAP easing
+  const updatePillPosition = useCallback(
+    (animate = true) => {
+      if (!tabsNavRef.current || !pillRef.current) return;
+      const activeBtn = tabsNavRef.current.querySelector<HTMLButtonElement>(
+        `button[data-view="${activeView}"]`
+      );
+      if (!activeBtn) return;
 
-    const navRect = tabsNavRef.current.getBoundingClientRect();
-    const btnRect = activeBtn.getBoundingClientRect();
-    const leftOffset = btnRect.left - navRect.left;
-    const width = btnRect.width;
-    const height = btnRect.height;
+      const navRect = tabsNavRef.current.getBoundingClientRect();
+      const btnRect = activeBtn.getBoundingClientRect();
+      const leftOffset = btnRect.left - navRect.left;
+      const width = btnRect.width;
+      const height = btnRect.height;
 
-    pillRef.current.style.setProperty('--ph', `${height}px`);
-    pillRef.current.style.setProperty('--tab-left', `${leftOffset}px`);
-    pillRef.current.style.setProperty('--tab-width', `${width}px`);
-    pillRef.current.style.opacity = '1';
+      pillRef.current.style.setProperty('--ph', `${height}px`);
+      pillRef.current.style.setProperty('--tab-left', `${leftOffset}px`);
+      pillRef.current.style.setProperty('--tab-width', `${width}px`);
 
-    if (capLRef.current && midRef.current && capRRef.current) {
+      if (!capLRef.current || !midRef.current || !capRRef.current) return;
+
       capLRef.current.style.transform = `translateX(${leftOffset}px)`;
       capRRef.current.style.transform = `translateX(${leftOffset + width - height}px)`;
       midRef.current.style.transform = `translateX(${leftOffset + height / 2}px) scaleX(${Math.max(0, width - height) / 100})`;
-    }
-  }, [activeView]);
+      pillRef.current.style.opacity = '1';
+
+      if (!animate || isReducedMotion()) {
+        return;
+      }
+
+      const currentX = (gsap.getProperty(capLRef.current, 'x') as number) || 0;
+      const movingRight = leftOffset > currentX;
+
+      const duration = $(0.6);
+      const ease = 'power3.inOut';
+
+      gsap
+        .timeline()
+        .to(
+          capLRef.current,
+          {
+            x: leftOffset,
+            duration,
+            ease,
+            delay: movingRight ? $(0.06) : 0,
+          },
+          0
+        )
+        .to(
+          capRRef.current,
+          {
+            x: leftOffset + width - height,
+            duration,
+            ease,
+            delay: !movingRight ? $(0.06) : 0,
+          },
+          0
+        )
+        .to(
+          midRef.current,
+          {
+            x: leftOffset + height / 2,
+            scaleX: Math.max(0, width - height) / 100,
+            duration,
+            ease,
+            delay: $(0.03),
+          },
+          0
+        )
+        .to(pillRef.current, { opacity: 1, duration: $(0.2) }, 0);
+    },
+    [activeView]
+  );
 
   useEffect(() => {
-    updatePillPosition();
-    window.addEventListener('resize', updatePillPosition);
-    return () => window.removeEventListener('resize', updatePillPosition);
+    updatePillPosition(false);
+    const handleResize = () => updatePillPosition(false);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [updatePillPosition]);
+
+  useEffect(() => {
+    updatePillPosition(true);
+  }, [activeView, updatePillPosition]);
 
   // Keyboard navigation across tabs
   const handleKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
@@ -73,6 +131,25 @@ export function Header({
       const prevIndex = (currentIndex - 1 + TABS.length) % TABS.length;
       onViewChange?.(TABS[prevIndex].id);
     }
+  };
+
+  const handleBellClick = () => {
+    if (bellBtnRef.current && !isReducedMotion()) {
+      const ico = bellBtnRef.current.querySelector('.ico');
+      if (ico) {
+        gsap.fromTo(
+          ico,
+          { rotation: 0 },
+          {
+            keyframes: { rotation: [0, 18, -14, 10, -6, 0] },
+            duration: 0.8,
+            ease: 'power1.out',
+            transformOrigin: '50% 10%',
+          }
+        );
+      }
+    }
+    onOpenNotifications?.();
   };
 
   return (
@@ -135,16 +212,23 @@ export function Header({
         </button>
 
         <button
+          ref={bellBtnRef}
           className="round-btn magnetic"
           type="button"
           id="bell"
-          aria-label={`Notifications, ${unreadNotificationsCount} new`}
-          onClick={onOpenNotifications}
+          aria-label={
+            unreadNotificationsCount > 0
+              ? `Notifications, ${unreadNotificationsCount} new`
+              : 'Notifications'
+          }
+          onClick={handleBellClick}
         >
           <Icon name="bell" className="ico ico--bell" aria-hidden="true" />
-          <span className="round-btn__badge" id="bell-badge">
-            {unreadNotificationsCount}
-          </span>
+          {unreadNotificationsCount > 0 && (
+            <span className="round-btn__badge" id="bell-badge">
+              {unreadNotificationsCount}
+            </span>
+          )}
         </button>
 
         <button

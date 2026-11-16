@@ -1,5 +1,6 @@
 import React from 'react';
 import type { IconName } from '@/lib/types';
+export type { IconName };
 
 export interface IconProps {
   name: IconName | string;

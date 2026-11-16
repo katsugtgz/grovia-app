@@ -1,5 +1,26 @@
 import { Database } from 'bun:sqlite';
 import path from 'node:path';
+import fs from 'node:fs';
+
+export class RouteNotFoundError extends Error {
+  public routePath: string;
+  constructor(routePath: string) {
+    super(`Route handler not found: ${routePath}`);
+    this.name = 'RouteNotFoundError';
+    this.routePath = routePath;
+  }
+}
+
+function findRouteFile(rootDir: string, relBasePath: string): string | null {
+  const extensions = ['.ts', '.tsx', '.js', '.jsx'];
+  for (const ext of extensions) {
+    const full = path.resolve(rootDir, `${relBasePath}${ext}`);
+    if (fs.existsSync(full)) {
+      return full;
+    }
+  }
+  return null;
+}
 
 export interface TestResponse<T = any> {
   status: number;
@@ -110,6 +131,16 @@ export class TestClient {
       handlerModule = resolved.handler;
       routeParams = resolved.routeParams;
     } catch (err: any) {
+      if (err instanceof RouteNotFoundError || err?.name === 'RouteNotFoundError') {
+        const errorMsg = `Route handler not found: ${err.routePath}`;
+        return {
+          status: 404,
+          ok: false,
+          headers: new Headers(),
+          data: { error: errorMsg } as any,
+          raw: new Response(errorMsg, { status: 404 }),
+        };
+      }
       return {
         status: 500,
         ok: false,
@@ -176,42 +207,52 @@ export class TestClient {
 
   private async resolveRoute(pathname: string): Promise<{ handler: any; routeParams: Record<string, string> }> {
     const rootDir = process.cwd();
+    const cleanPath = pathname.replace(/\/+$/, '') || '/';
 
-    if (pathname === '/api/health') {
-      const mod = await import(path.resolve(rootDir, 'app/api/health/route'));
-      return { handler: mod, routeParams: {} };
-    }
-    if (pathname === '/api/metrics') {
-      const mod = await import(path.resolve(rootDir, 'app/api/metrics/route'));
-      return { handler: mod, routeParams: {} };
-    }
-    if (pathname === '/api/roi') {
-      const mod = await import(path.resolve(rootDir, 'app/api/roi/route'));
-      return { handler: mod, routeParams: {} };
-    }
-    if (pathname === '/api/waitlist') {
-      const mod = await import(path.resolve(rootDir, 'app/api/waitlist/route'));
-      return { handler: mod, routeParams: {} };
-    }
-    if (pathname === '/api/inquiries') {
-      const mod = await import(path.resolve(rootDir, 'app/api/inquiries/route'));
+    const staticMap: Record<string, string> = {
+      '/api/health': 'app/api/health/route',
+      '/api/metrics': 'app/api/metrics/route',
+      '/api/roi': 'app/api/roi/route',
+      '/api/waitlist': 'app/api/waitlist/route',
+      '/api/inquiries': 'app/api/inquiries/route',
+    };
+
+    if (staticMap[cleanPath]) {
+      const relBase = staticMap[cleanPath];
+      const routeFile = findRouteFile(rootDir, relBase);
+      if (!routeFile) {
+        throw new RouteNotFoundError(`${relBase}.ts`);
+      }
+      const mod = await import(routeFile);
       return { handler: mod, routeParams: {} };
     }
 
-    const dynamicInquiriesMatch = pathname.match(/^\/api\/inquiries\/([^/]+)$/);
+    const dynamicInquiriesMatch = cleanPath.match(/^\/api\/inquiries\/([^/]+)$/);
     if (dynamicInquiriesMatch) {
       const id = decodeURIComponent(dynamicInquiriesMatch[1]);
-      try {
-        const mod = await import(path.resolve(rootDir, 'app/api/inquiries/[id]/route'));
-        return { handler: mod, routeParams: { id } };
-      } catch {
-        // Fallback: single route handler in /api/inquiries/route.ts handling routeParams
-        const mod = await import(path.resolve(rootDir, 'app/api/inquiries/route'));
+      const dynamicRel = 'app/api/inquiries/[id]/route';
+      const rootRel = 'app/api/inquiries/route';
+      const dynamicFile = findRouteFile(rootDir, dynamicRel);
+      if (dynamicFile) {
+        const mod = await import(dynamicFile);
         return { handler: mod, routeParams: { id } };
       }
+      const rootFile = findRouteFile(rootDir, rootRel);
+      if (rootFile) {
+        const mod = await import(rootFile);
+        return { handler: mod, routeParams: { id } };
+      }
+      throw new RouteNotFoundError(`${dynamicRel}.ts`);
     }
 
-    throw new Error(`[TestClient] Unknown route path: ${pathname}`);
+    // Any other arbitrary path:
+    const relBase = `app${cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`}/route`;
+    const routeFile = findRouteFile(rootDir, relBase);
+    if (!routeFile) {
+      throw new RouteNotFoundError(`${relBase}.ts`);
+    }
+    const mod = await import(routeFile);
+    return { handler: mod, routeParams: {} };
   }
 
   private async parseResponse<T>(res: Response): Promise<TestResponse<T>> {

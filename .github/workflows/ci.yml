@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      npm_config_yes: "true"
     steps:
       - uses: actions/checkout@v4
 

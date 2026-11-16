@@ -1,0 +1,106 @@
+.eslintrc.json
+  h_cc1f32aec57e6b 1-3
+.github/workflows/ci.yml
+  h_cc1f32aec57e6b 1-36
+.gitignore
+  h_cc1f32aec57e6b 1-31
+PROJECT.md
+  h_cc1f32aec57e6b 1-73
+TEST_INFRA.md
+  h_cc1f32aec57e6b 1-83
+app/api/health/route.ts
+  h_cc1f32aec57e6b 1-28
+app/globals.css
+  h_cc1f32aec57e6b 1-431
+app/layout.tsx
+  h_cc1f32aec57e6b 1-60
+app/page.tsx
+  h_cc1f32aec57e6b 1-90
+bun.lock
+  h_cc1f32aec57e6b 1-871
+components/Header.tsx
+  h_cc1f32aec57e6b 1-160
+components/ui/Icon.tsx
+  h_cc1f32aec57e6b 1-69
+lib/template-core.ts
+  h_cc1f32aec57e6b 1-332
+lib/types.ts
+  h_cc1f32aec57e6b 1-234
+next-env.d.ts
+  h_cc1f32aec57e6b 1-6
+next.config.ts
+  h_cc1f32aec57e6b 1-7
+package.json
+  h_cc1f32aec57e6b 1-39
+postcss.config.mjs
+  h_cc1f32aec57e6b 1-6
+public/photos/grovia/demo-avatar.svg
+  h_cc1f32aec57e6b 1-11
+tailwind.config.ts
+  h_cc1f32aec57e6b 1-40
+tests/core.test.ts
+  h_cc1f32aec57e6b 1-277
+tests/e2e/harness/assertions.ts
+  h_cc1f32aec57e6b 1-107
+tests/e2e/harness/fixtures.ts
+  h_cc1f32aec57e6b 1-202
+tests/e2e/harness/test-client.ts
+  h_cc1f32aec57e6b 1-259
+tests/e2e/tier1-features/api-health.test.ts
+  h_cc1f32aec57e6b 1-64
+tests/e2e/tier1-features/api-inquiries.test.ts
+  h_cc1f32aec57e6b 1-107
+tests/e2e/tier1-features/api-metrics.test.ts
+  h_cc1f32aec57e6b 1-66
+tests/e2e/tier1-features/api-roi.test.ts
+  h_cc1f32aec57e6b 1-60
+tests/e2e/tier1-features/api-waitlist.test.ts
+  h_cc1f32aec57e6b 1-86
+tests/e2e/tier1-features/db-engine.test.ts
+  h_cc1f32aec57e6b 1-149
+tests/e2e/tier1-features/template-core.test.ts
+  h_cc1f32aec57e6b 1-85
+tests/e2e/tier1-features/tooling-structure.test.ts
+  h_cc1f32aec57e6b 1-84
+tests/e2e/tier1-features/views-contracts.test.ts
+  h_cc1f32aec57e6b 1-112
+tests/e2e/tier2-boundaries/boundary-api-inquiries.test.ts
+  h_cc1f32aec57e6b 1-133
+tests/e2e/tier2-boundaries/boundary-api-roi.test.ts
+  h_cc1f32aec57e6b 1-84
+tests/e2e/tier2-boundaries/boundary-api-waitlist.test.ts
+  h_cc1f32aec57e6b 1-124
+tests/e2e/tier2-boundaries/boundary-db-engine.test.ts
+  h_cc1f32aec57e6b 1-181
+tests/e2e/tier2-boundaries/boundary-template-core.test.ts
+  h_cc1f32aec57e6b 1-86
+tests/e2e/tier3-combinations/concurrent-access-state.test.ts
+  h_cc1f32aec57e6b 1-100
+tests/e2e/tier3-combinations/inquiries-status-workflow.test.ts
+  h_cc1f32aec57e6b 1-84
+tests/e2e/tier3-combinations/roi-pipeline-integration.test.ts
+  h_cc1f32aec57e6b 1-73
+tests/e2e/tier3-combinations/waitlist-metrics-sync.test.ts
+  h_cc1f32aec57e6b 1-87
+tests/e2e/tier4-scenarios/audit-readiness-flow.test.ts
+  h_cc1f32aec57e6b 1-44
+tests/e2e/tier4-scenarios/enterprise-lead-inquiry-flow.test.ts
+  h_cc1f32aec57e6b 1-79
+tests/e2e/tier4-scenarios/investor-roi-simulation-flow.test.ts
+  h_cc1f32aec57e6b 1-78
+tests/e2e/tier4-scenarios/launch-waitlist-surge-flow.test.ts
+  h_cc1f32aec57e6b 1-66
+tsconfig.json
+  h_cc1f32aec57e6b 1-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ecb154b31c1415571b3fd365a5117f6a1aec0f50",
+  "prompts": {},
+  "humans": {
+    "h_cc1f32aec57e6b": {
+      "author": "Muhammad Naufal Mahdi <053792227@ecampus.ut.ac.id>"
+    }
+  }
+}

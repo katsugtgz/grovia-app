@@ -1,0 +1,42 @@
+.github/ISSUE_TEMPLATE/bug_report.md
+  h_cc1f32aec57e6b 1-27
+.github/ISSUE_TEMPLATE/feature_request.md
+  h_cc1f32aec57e6b 1-20
+.github/PULL_REQUEST_TEMPLATE.md
+  h_cc1f32aec57e6b 1-19
+.github/dependabot.yml
+  h_cc1f32aec57e6b 1-13
+.github/workflows/cd.yml
+  h_cc1f32aec57e6b 1-35
+.gitignore
+  h_cc1f32aec57e6b 32-34
+CHANGELOG.md
+  h_cc1f32aec57e6b 1-14
+CODE_OF_CONDUCT.md
+  h_cc1f32aec57e6b 1-35
+CONTRIBUTING.md
+  h_cc1f32aec57e6b 1-42
+LICENSE
+  h_cc1f32aec57e6b 1-21
+README.md
+  h_cc1f32aec57e6b 1-145
+SECURITY.md
+  h_cc1f32aec57e6b 1-17
+app/globals.css
+  h_cc1f32aec57e6b 879
+lib/db.ts
+  h_cc1f32aec57e6b 8-111,120-242,323,358
+netlify.toml
+  h_cc1f32aec57e6b 1-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e5b854efabf6675f3da595a93b09edc140309cb",
+  "prompts": {},
+  "humans": {
+    "h_cc1f32aec57e6b": {
+      "author": "Muhammad Naufal Mahdi <053792227@ecampus.ut.ac.id>"
+    }
+  }
+}

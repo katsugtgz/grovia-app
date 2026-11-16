@@ -1,0 +1,120 @@
+.github/workflows/ci.yml
+  h_cc1f32aec57e6b 12-13
+PROJECT.md
+  h_cc1f32aec57e6b 46-50
+TEST_READY.md
+  h_cc1f32aec57e6b 1-81
+app/api/health/route.ts
+  h_cc1f32aec57e6b 3-4,10,16,25,32-47
+app/api/inquiries/[id]/route.ts
+  h_cc1f32aec57e6b 1-80
+app/api/inquiries/route.ts
+  h_cc1f32aec57e6b 1-138
+app/api/metrics/route.ts
+  h_cc1f32aec57e6b 1-56
+app/api/roi/route.ts
+  h_cc1f32aec57e6b 1-71
+app/api/waitlist/route.ts
+  h_cc1f32aec57e6b 1-95
+app/globals.css
+  h_cc1f32aec57e6b 360-2241,2243,2246-2287,2289,2322-2371,2373,2377-2405,2411-2472,2475-2481,2486-2513,2515
+app/page.tsx
+  h_cc1f32aec57e6b 3-5,7-9,11-18,22-51,67-160,163-164,167,173-225
+components/Header.tsx
+  h_cc1f32aec57e6b 4,7,35,37-44,46-50,52-56,61-109,112-115,118-121,136-154,215,219-224,227-231
+components/cards/AccordionCard.tsx
+  h_cc1f32aec57e6b 1-225
+components/cards/CalendarCard.tsx
+  h_cc1f32aec57e6b 1-346
+components/cards/GrowthRoiCard.tsx
+  h_cc1f32aec57e6b 1-198
+components/cards/OnboardingCard.tsx
+  h_cc1f32aec57e6b 1-243
+components/cards/ProfileCard.tsx
+  h_cc1f32aec57e6b 1-112
+components/cards/ProgressCard.tsx
+  h_cc1f32aec57e6b 1-171
+components/cards/TimeTrackerCard.tsx
+  h_cc1f32aec57e6b 1-302
+components/modals/DemoBookingModal.tsx
+  h_cc1f32aec57e6b 1-228
+components/modals/InviteFormFields.tsx
+  h_cc1f32aec57e6b 1-159
+components/modals/InviteModal.tsx
+  h_cc1f32aec57e6b 1-233
+components/modals/SettingsModal.tsx
+  h_cc1f32aec57e6b 1-186
+components/ui/Icon.tsx
+  h_cc1f32aec57e6b 3
+components/ui/MagneticButton.tsx
+  h_cc1f32aec57e6b 1-70
+components/ui/NotificationTray.tsx
+  h_cc1f32aec57e6b 1-150
+components/ui/Toast.tsx
+  h_cc1f32aec57e6b 1-2
+components/ui/ToastNotification.tsx
+  h_cc1f32aec57e6b 1-39
+components/views/OverviewView.tsx
+  h_cc1f32aec57e6b 1-171
+components/views/PayrollView.tsx
+  h_cc1f32aec57e6b 1-226
+components/views/PeopleView.tsx
+  h_cc1f32aec57e6b 1-291
+components/views/payroll/PayrollPersonCard.tsx
+  h_cc1f32aec57e6b 1-173
+components/views/payroll/PayrollRoster.tsx
+  h_cc1f32aec57e6b 1-65
+components/views/payroll/PayrollTimesheet.tsx
+  h_cc1f32aec57e6b 1-116
+components/views/people/PeopleActionTray.tsx
+  h_cc1f32aec57e6b 1-100
+components/views/people/PeopleTable.tsx
+  h_cc1f32aec57e6b 1-121
+db/seed.ts
+  h_cc1f32aec57e6b 1-9
+lib/api-helpers.ts
+  h_cc1f32aec57e6b 1-49
+lib/data.ts
+  h_cc1f32aec57e6b 1-169
+lib/db.ts
+  h_cc1f32aec57e6b 1-431
+lib/motion.ts
+  h_cc1f32aec57e6b 1-15
+lib/pdf-generator.ts
+  h_cc1f32aec57e6b 1-159
+lib/toast.ts
+  h_cc1f32aec57e6b 1-8
+lib/types.ts
+  h_cc1f32aec57e6b 39,198
+lib/use-entrance-timeline.ts
+  h_cc1f32aec57e6b 1-108
+lib/validations.ts
+  h_cc1f32aec57e6b 1-109
+tests/e2e/harness/test-client.ts
+  h_cc1f32aec57e6b 3-23,134-143,210,212-226,230,233-237,239-242,245,248-255
+tests/e2e/tier1-features/views-contracts.test.ts
+  h_cc1f32aec57e6b 2-18,21-38,41-65,67-68,71-93,96-114,117-133,136-156,159-182,185-204,207-223,225-228,230-233,237-241,244-259
+tests/e2e/tier2-boundaries/boundary-api-health.test.ts
+  h_cc1f32aec57e6b 1-84
+tests/e2e/tier2-boundaries/boundary-api-metrics.test.ts
+  h_cc1f32aec57e6b 1-65
+tests/e2e/tier2-boundaries/boundary-db-engine.test.ts
+  h_cc1f32aec57e6b 10,14-24
+tests/e2e/tier2-boundaries/boundary-repo-ci.test.ts
+  h_cc1f32aec57e6b 1-66
+tests/e2e/tier2-boundaries/boundary-tooling-shell.test.ts
+  h_cc1f32aec57e6b 1-110
+tests/e2e/tier2-boundaries/boundary-views-motion.test.ts
+  h_cc1f32aec57e6b 1-191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "775050a94f0df1b1a58941e5077c738a5741016b",
+  "prompts": {},
+  "humans": {
+    "h_cc1f32aec57e6b": {
+      "author": "Muhammad Naufal Mahdi <053792227@ecampus.ut.ac.id>"
+    }
+  }
+}

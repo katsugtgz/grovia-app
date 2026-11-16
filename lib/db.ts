@@ -5,6 +5,110 @@ import { createRequire } from 'node:module';
 
 const req = createRequire(import.meta.url);
 
+// Fallback in-memory stores for non-Bun runtimes (e.g., Next.js build or Netlify Node serverless)
+interface DummyWaitlistRow {
+  id: number;
+  name: string;
+  email: string;
+  company: string | null;
+  teamSize: string | null;
+  useCase: string | null;
+  status: string;
+  createdAt: string;
+}
+
+interface DummyInquiryRow {
+  id: number;
+  ticket_id: string;
+  ticketId: string;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  priority: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+const dummyWaitlistStore: DummyWaitlistRow[] = [
+  {
+    id: 1,
+    name: 'Alex Rivera',
+    email: 'alex@innovate.io',
+    company: 'Innovate Labs',
+    teamSize: '11-50',
+    useCase: 'Automated talent operations',
+    status: 'active',
+    createdAt: '2026-11-16 00:00:00',
+  },
+  {
+    id: 2,
+    name: 'Elena Rostova',
+    email: 'elena@quantum.tech',
+    company: 'Quantum Dynamics',
+    teamSize: '51-200',
+    useCase: 'Enterprise compensation modeling',
+    status: 'active',
+    createdAt: '2026-11-16 00:00:00',
+  },
+  {
+    id: 3,
+    name: 'Marcus Chen',
+    email: 'marcus@hypergrowth.co',
+    company: 'Hypergrowth AI',
+    teamSize: '1-10',
+    useCase: 'Early-stage sprint planning',
+    status: 'active',
+    createdAt: '2026-11-16 00:00:00',
+  },
+];
+
+const dummyInquiriesStore: DummyInquiryRow[] = [
+  {
+    id: 1,
+    ticket_id: 'GROV-1001',
+    ticketId: 'GROV-1001',
+    name: 'Sarah Jenkins',
+    email: 'sarah@vertex.io',
+    subject: 'Enterprise Tier Licensing',
+    message: 'Looking for custom volume licensing and SSO integration details.',
+    priority: 'high',
+    status: 'new',
+    created_at: '2026-11-16 00:00:00',
+    updated_at: '2026-11-16 00:00:00',
+  },
+  {
+    id: 2,
+    ticket_id: 'GROV-1002',
+    ticketId: 'GROV-1002',
+    name: "Liam O'Connor",
+    email: 'liam@finscale.org',
+    subject: 'API Webhook Documentation',
+    message: 'Requesting API docs for payroll synchronization webhooks.',
+    priority: 'medium',
+    status: 'in_progress',
+    created_at: '2026-11-16 00:00:00',
+    updated_at: '2026-11-16 00:00:00',
+  },
+  {
+    id: 3,
+    ticket_id: 'GROV-1003',
+    ticketId: 'GROV-1003',
+    name: 'Chloe Zhao',
+    email: 'chloe@nexus.co',
+    subject: 'Bento Dashboard Customization',
+    message: 'Can we reorder bento cards via the configuration schema?',
+    priority: 'low',
+    status: 'resolved',
+    created_at: '2026-11-16 00:00:00',
+    updated_at: '2026-11-16 00:00:00',
+  },
+];
+
+let nextDummyWaitlistId = dummyWaitlistStore.length + 1;
+let nextDummyInquiryId = dummyInquiriesStore.length + 1;
+
 // Dynamically resolve Bun's native Database class to support Next.js build evaluation
 let SqliteDatabase: typeof Database;
 function getDatabaseConstructor(): typeof Database {
@@ -12,12 +116,130 @@ function getDatabaseConstructor(): typeof Database {
     if (typeof Bun !== 'undefined') {
       SqliteDatabase = req('bun:sqlite').Database;
     } else {
-      // Fallback stub for Next.js build-time page data collection in Node environment
       SqliteDatabase = class DummyDatabase {
-        run() { return { changes: 0, lastInsertRowid: 0 }; }
-        query() { return { get: () => null, all: () => [] }; }
-        prepare() { return { run: () => ({ changes: 0 }), get: () => null, all: () => [] }; }
-        transaction(fn: any) { return fn; }
+        run() {
+          return { changes: 0, lastInsertRowid: 0 };
+        }
+        query(sql: string) {
+          const normalized = sql.trim().toUpperCase();
+          return {
+            get: () => {
+              if (normalized.includes('SELECT 1 AS ALIVE')) {
+                return { alive: 1 };
+              }
+              if (normalized.includes('COUNT(*)') && normalized.includes('WAITLIST')) {
+                return { count: dummyWaitlistStore.length };
+              }
+              return null;
+            },
+            all: () => [],
+          };
+        }
+        prepare(sql: string) {
+          const normalized = sql.trim().replace(/\s+/g, ' ').toUpperCase();
+          return {
+            run: (...params: unknown[]) => {
+              const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+              if (normalized.startsWith('INSERT') && normalized.includes('INTO WAITLIST')) {
+                const email = String(params[1] ?? '').trim().toLowerCase();
+                const exists = dummyWaitlistStore.some((r) => r.email.toLowerCase() === email);
+                if (exists) {
+                  if (normalized.includes('OR IGNORE')) return { changes: 0 };
+                  throw new Error('UNIQUE constraint failed: waitlist.email');
+                }
+                const id = nextDummyWaitlistId++;
+                dummyWaitlistStore.push({
+                  id,
+                  name: String(params[0] ?? ''),
+                  email,
+                  company: params[2] ? String(params[2]) : null,
+                  teamSize: params[3] ? String(params[3]) : '1-10',
+                  useCase: params[4] ? String(params[4]) : null,
+                  status: params[5] ? String(params[5]) : 'pending',
+                  createdAt: now,
+                });
+                return { changes: 1, lastInsertRowid: id };
+              }
+
+              if (normalized.startsWith('INSERT') && normalized.includes('INTO INQUIRIES')) {
+                const ticketId = String(params[0] ?? '');
+                const exists = dummyInquiriesStore.some((r) => r.ticket_id === ticketId);
+                if (exists) {
+                  if (normalized.includes('OR IGNORE')) return { changes: 0 };
+                  throw new Error('UNIQUE constraint failed: inquiries.ticket_id');
+                }
+                const id = nextDummyInquiryId++;
+                dummyInquiriesStore.push({
+                  id,
+                  ticket_id: ticketId,
+                  ticketId,
+                  name: String(params[1] ?? ''),
+                  email: String(params[2] ?? ''),
+                  subject: String(params[3] ?? ''),
+                  message: String(params[4] ?? ''),
+                  priority: String(params[5] ?? 'medium'),
+                  status: String(params[6] ?? 'new'),
+                  created_at: now,
+                  updated_at: now,
+                });
+                return { changes: 1, lastInsertRowid: id };
+              }
+
+              if (normalized.startsWith('UPDATE INQUIRIES')) {
+                const [status, priority, targetId] = params;
+                const row = dummyInquiriesStore.find((r) => r.id === Number(targetId));
+                if (!row) return { changes: 0 };
+                row.status = String(status);
+                row.priority = String(priority);
+                row.updated_at = now;
+                return { changes: 1 };
+              }
+
+              return { changes: 0 };
+            },
+            get: (...params: unknown[]) => {
+              if (normalized.includes('FROM WAITLIST') && normalized.includes('LOWER(EMAIL) = ?')) {
+                const targetEmail = String(params[0] ?? '').toLowerCase();
+                const found = dummyWaitlistStore.find((r) => r.email.toLowerCase() === targetEmail);
+                return found ? { id: found.id } : null;
+              }
+              if (normalized.includes('FROM INQUIRIES')) {
+                if (normalized.includes('WHERE TICKET_ID = ? OR CAST(ID AS TEXT) = ?')) {
+                  const a = String(params[0] ?? '');
+                  const b = String(params[1] ?? '');
+                  return dummyInquiriesStore.find((r) => r.ticket_id === a || String(r.id) === b) || null;
+                }
+                if (normalized.includes('WHERE TICKET_ID = ?')) {
+                  const ticketId = String(params[0] ?? '');
+                  return dummyInquiriesStore.find((r) => r.ticket_id === ticketId) || null;
+                }
+                if (normalized.includes('WHERE ID = ?')) {
+                  const idNum = Number(params[0]);
+                  const found = dummyInquiriesStore.find((r) => r.id === idNum);
+                  return found ? { ...found, updatedAt: found.updated_at } : null;
+                }
+              }
+              return null;
+            },
+            all: (...params: unknown[]) => {
+              if (normalized.includes('FROM WAITLIST')) {
+                const limit = typeof params[0] === 'number' ? params[0] : 50;
+                return dummyWaitlistStore.slice(0, limit).map((r) => ({ ...r }));
+              }
+              if (normalized.includes('FROM INQUIRIES')) {
+                const statusFilter = params.length > 0 && params[0] ? String(params[0]) : undefined;
+                const rows = statusFilter
+                  ? dummyInquiriesStore.filter((r) => r.status === statusFilter)
+                  : dummyInquiriesStore;
+                return [...rows].sort((a, b) => b.id - a.id).map((r) => ({ ...r }));
+              }
+              return [];
+            },
+          };
+        }
+        transaction(fn: (...args: unknown[]) => unknown) {
+          return fn;
+        }
         close() {}
       } as unknown as typeof Database;
     }
@@ -98,7 +320,7 @@ export function initSchema(database: Database): void {
 export function initDatabase(dbPath?: string): Database {
   const targetPath = dbPath || getDatabasePath();
 
-  if (targetPath !== ':memory:') {
+  if (typeof Bun !== 'undefined' && targetPath !== ':memory:') {
     const dir = path.dirname(targetPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -133,7 +355,7 @@ export function getDb(customPath?: string): Database {
 
   if (globalThis.__grovia_db__) {
     const curPath = globalThis.__grovia_db_path__;
-    if (curPath && curPath !== ':memory:' && !fs.existsSync(curPath)) {
+    if (typeof Bun !== 'undefined' && curPath && curPath !== ':memory:' && !fs.existsSync(curPath)) {
       try {
         globalThis.__grovia_db__.close();
       } catch {

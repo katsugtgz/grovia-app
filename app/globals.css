@@ -876,8 +876,7 @@
     min-height: 0;
   }
   .app[data-view="overview"] {
-    height: 100dvh;
-    min-height: 700px;
+    min-height: 100dvh;
   }
   .app[data-view="overview"] .bento,
   .app[data-view="overview"] .bento > .card {

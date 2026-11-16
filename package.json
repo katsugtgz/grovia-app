@@ -1,0 +1,39 @@
+{
+  "name": "grovia-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests/core.test.ts",
+    "test:m1": "bun test tests/core.test.ts tests/e2e/tier1-features/api-health.test.ts tests/e2e/tier1-features/template-core.test.ts tests/e2e/tier1-features/tooling-structure.test.ts tests/e2e/tier1-features/views-contracts.test.ts tests/e2e/tier2-boundaries/boundary-template-core.test.ts",
+    "test:e2e": "bun test tests/e2e/",
+    "doctor": "npx react-doctor@latest",
+    "validate": "bun run lint && bun run typecheck && bun run test && bun run build && bun run doctor"
+  },
+  "dependencies": {
+    "@gsap/react": "^2.1.2",
+    "gsap": "^3.15.1",
+    "next": "^15.5.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/node": "^26.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "bun-types": "^1.4.4",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "15.5.29",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.9.3"
+  }
+}

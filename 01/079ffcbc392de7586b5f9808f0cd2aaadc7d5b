@@ -1,0 +1,16 @@
+lib/template-core.ts
+  h_cc1f32aec57e6b 27-33,147-156,169-171,183
+tests/core.test.ts
+  h_cc1f32aec57e6b 83-86,192-234
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "01079ffcbc392de7586b5f9808f0cd2aaadc7d5b",
+  "prompts": {},
+  "humans": {
+    "h_cc1f32aec57e6b": {
+      "author": "Muhammad Naufal Mahdi <053792227@ecampus.ut.ac.id>"
+    }
+  }
+}

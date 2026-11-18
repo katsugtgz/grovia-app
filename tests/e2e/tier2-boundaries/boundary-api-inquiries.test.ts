@@ -1,11 +1,16 @@
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterAll } from 'bun:test';
 import { testClient, resetDatabase } from '../harness/test-client';
 import { fixtures, createRandomEmail } from '../harness/fixtures';
 import { assertions } from '../harness/assertions';
 
 describe('Tier 2 — Boundary: Inquiries Management Endpoint', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetDatabase();
+    await testClient.loginAsAdmin();
+  });
+
+  afterAll(() => {
+    testClient.clearAuth();
   });
 
   test('T2.3.1: Missing subject field returns HTTP 400 Bad Request', async () => {

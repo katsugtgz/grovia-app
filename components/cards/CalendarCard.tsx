@@ -6,7 +6,11 @@ import { $, isReducedMotion } from '@/lib/motion';
 import { Icon } from '@/components/ui/Icon';
 import { triggerToast } from '@/lib/toast';
 import { no } from '@/lib/template-core';
-import { INITIAL_PEOPLE } from '@/lib/data';
+import type { Person } from '@/lib/types';
+
+export interface CalendarCardProps {
+  people?: Person[];
+}
 
 export interface CalendarEvent {
   id: string;
@@ -131,7 +135,9 @@ const WEEKS: CalendarWeek[] = [
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const TIME_LABELS = ['8:00 am', '9:00 am', '10:00 am', '11:00 am'];
 
-export function CalendarCard() {
+const EMPTY_PEOPLE: Person[] = [];
+
+export function CalendarCard({ people = EMPTY_PEOPLE }: CalendarCardProps) {
   const cardRef = useRef<HTMLElement>(null);
   const calGridRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -162,8 +168,13 @@ export function CalendarCard() {
     }
   };
 
-  // Entrance animation when week changes
+  // Entrance animation when week changes after initial mount
+  const hasMountedWeekRef = useRef(false);
   useEffect(() => {
+    if (!hasMountedWeekRef.current) {
+      hasMountedWeekRef.current = true;
+      return;
+    }
     if (isReducedMotion() || !calGridRef.current || !titleRef.current) return;
 
     const dynEls = calGridRef.current.querySelectorAll('.cal__dyn');
@@ -315,14 +326,15 @@ export function CalendarCard() {
             </span>
             <span className="avatars">
               {ev.who.map((personIdx) => {
-                const person = INITIAL_PEOPLE[personIdx];
+                const person = people[personIdx];
+                const av = person?.av ?? '#cfe0c8';
                 return (
                   <span
                     key={`ev-av-${ev.id}-${personIdx}`}
                     className="avatar"
-                    style={{ '--av': person.av } as React.CSSProperties}
+                    style={{ '--av': av } as React.CSSProperties}
                     aria-hidden="true"
-                    dangerouslySetInnerHTML={{ __html: no(person.look, person.av) }}
+                    dangerouslySetInnerHTML={{ __html: no(person?.look, av) }}
                   />
                 );
               })}

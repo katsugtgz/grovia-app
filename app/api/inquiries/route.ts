@@ -2,10 +2,14 @@ import { NextResponse } from 'next/server';
 import { InquiryPatchRequestSchema, InquiryPostRequestSchema } from '@/lib/validations';
 import { createInquiry, getInquiries, updateInquiry } from '@/lib/db';
 import { methodNotAllowed, parseJsonBody } from '@/lib/api-helpers';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request): Promise<Response> {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
+
   try {
     const url = new URL(request.url);
     const statusFilter = url.searchParams.get('status') || undefined;
@@ -34,6 +38,9 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
+
   const { data: rawBody, error: parseError } = await parseJsonBody(request);
   if (parseError) return parseError;
 
@@ -69,6 +76,9 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 export async function PATCH(request: Request): Promise<Response> {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
+
   const { data: rawBody, error: parseError } = await parseJsonBody(request);
   if (parseError) return parseError;
 

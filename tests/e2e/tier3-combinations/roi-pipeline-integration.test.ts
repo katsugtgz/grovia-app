@@ -1,9 +1,18 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, beforeEach, afterAll } from 'bun:test';
 import { testClient } from '../harness/test-client';
 import { assertions } from '../harness/assertions';
 
 describe('Tier 3 — Cross-Feature: ROI & Pipeline Metrics Integration (F8 + F9)', () => {
+  beforeEach(() => {
+    testClient.clearAuth();
+  });
+
+  afterAll(() => {
+    testClient.clearAuth();
+  });
+
   test('T3.3.1: Fetch live SaaS pipeline benchmarks from GET /api/metrics', async () => {
+    await testClient.loginAsAdmin();
     const metricsRes = await testClient.get('/api/metrics');
     assertions.assertOk(metricsRes);
     assertions.assertMetricsResponse(metricsRes.data);
@@ -11,7 +20,9 @@ describe('Tier 3 — Cross-Feature: ROI & Pipeline Metrics Integration (F8 + F9)
   });
 
   test('T3.3.2: Feed pipeline metrics into POST /api/roi to compute dynamic growth trajectory', async () => {
+    await testClient.loginAsAdmin();
     const metricsRes = await testClient.get('/api/metrics');
+    testClient.clearAuth();
     const pipeline = metricsRes.data.pipeline;
 
     // Derive simulated traffic from pipeline output and active team

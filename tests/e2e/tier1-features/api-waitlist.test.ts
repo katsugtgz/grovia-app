@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterAll } from 'bun:test';
 import { testClient, resetDatabase } from '../harness/test-client';
 import { fixtures, createRandomEmail } from '../harness/fixtures';
 import { assertions } from '../harness/assertions';
@@ -6,6 +6,11 @@ import { assertions } from '../harness/assertions';
 describe('Tier 1 — F10: Waitlist Booking Endpoint', () => {
   beforeEach(() => {
     resetDatabase();
+    testClient.clearAuth();
+  });
+
+  afterAll(() => {
+    testClient.clearAuth();
   });
 
   test('T1.4.1: POST /api/waitlist with standard payload returns 200/201 and success', async () => {
@@ -67,6 +72,7 @@ describe('Tier 1 — F10: Waitlist Booking Endpoint', () => {
   });
 
   test('T1.4.6: GET /api/waitlist returns waitlist status and count', async () => {
+    await testClient.loginAsAdmin();
     const res = await testClient.get('/api/waitlist');
     assertions.assertStatus(res, 200);
     expect(typeof res.data.count).toBe('number');

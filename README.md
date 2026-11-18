@@ -56,7 +56,24 @@
 - **Compositor-Only Physics & `prefers-reduced-motion` Safety**: All animations strictly animate GPU-composited `transform` and `opacity` properties via GSAP 3.15 (`Flip`, `quickTo`, `power3.out`, `back.out`, `elastic.out`) and automatically snap when `prefers-reduced-motion: reduce` is enabled.
 - **Fullstack Next.js 15 Route Handlers + Bun SQLite (`WAL`)**: Real API persistence for waitlist signups, support inquiries/tickets, hiring pipeline metrics, and dynamic 12-month ROI modeling (`bun:sqlite` locally, with seamless in-memory serverless fallback on Netlify Node runtimes).
 - **Google Chrome Modern Web Guidance Aligned**: LCP portrait prioritization (`priority`), non-blocking interactions (INP-friendly transitions), CLS containment, native `<dialog>` modals with ESC/backdrop closing, and semantic ARIA landmarks/tablists.
-- **Zero-Defect Verification**: `235/235` passing tests (unit, contract, integration, and real-world scenarios), strict ESLint + TypeScript checks, automated GitHub Actions CI & Netlify CD, and **`100 / 100 Great`** on `npx react-doctor@latest`.
+- **Zero-Defect Verification**: `368/368` passing tests across 47 suites (unit, contract, integration, and live HTTP E2E tiers 1–4), strict ESLint + TypeScript checks, automated GitHub Actions CI & Netlify CD, and **`100 / 100 Great`** on `npx react-doctor@latest`.
+
+---
+
+## Routes, Authentication & Access Control
+
+| Route | Access | Description |
+| --- | --- | --- |
+| `/` | Public | Marketing landing page with product pitch, Bento feature highlights, pricing tiers, interactive waitlist signup (`POST /api/waitlist`), and zero employee PII in public JS bundles |
+| `/login` | Public | Email/password sign-in (`POST /api/auth/login`) with open-redirect-safe `next` target sanitization (`307` -> `/workspace` when already authenticated) |
+| `/workspace` | Authenticated | Protected Bento people-ops workspace (`Overview`, `People`, `Payroll`, `InviteModal`, `NotificationTray`, profile/sign-out menu); redirects unauthenticated requests (`307`) to `/login?next=%2Fworkspace` |
+
+- **Seeded Demo Workspace Account**:
+  - **Email**: `admin@grovia.io`
+  - **Password**: `grovia-demo-2026`
+- **Session Signing (`AUTH_SECRET`)**:
+  - Edge-compatible Web Crypto HMAC-SHA256 stateless `grovia_session` cookie (`HttpOnly; SameSite=Lax; Path=/; Max-Age=86400`).
+  - Configure `AUTH_SECRET` (or `SESSION_SECRET`) in production environments; falls back to a deterministic development secret for local dev and zero-secret CI runs.
 
 ---
 
@@ -64,23 +81,30 @@
 
 | Surface / Module | Capabilities | Implementation |
 | --- | --- | --- |
+| **Public Landing (`/`)** | Semantic `<header>` + `<main>` landmarks, Bento feature showcase, pricing tiers, waitlist signup form (`POST /api/waitlist`), PII-free client bundle | [`components/landing/LandingPage.tsx`](./components/landing/LandingPage.tsx) |
+| **Auth & Edge Guard** | Web Crypto `grovia_session` signing/verification, bounded `decodeURIComponent` open-redirect sanitizer, Edge `middleware.ts`, `/login` UI | [`middleware.ts`](./middleware.ts), [`lib/auth-edge.ts`](./lib/auth-edge.ts), [`components/auth/LoginForm.tsx`](./components/auth/LoginForm.tsx) |
 | **Overview Bento** | Animated split-text greeting, hiring pipeline rail (`17% / 15% / 56% / 12%`), live metrics counters, 3D parallax profile card, 7-day progress chart, SVG circular stopwatch (`6°/s`, 60 ticks, digit rollers), 14-particle onboarding checklist, accordion & week calendar, Growth & ROI calculator | [`components/views/OverviewView.tsx`](./components/views/OverviewView.tsx) |
 | **People Directory** | Instant search across name/role/team, GSAP `Flip` animated team filter pills (`All`, `Design`, `Engineering`, `Product`, `Operations`), selectable table rows, procedural SVG avatars (`no()`), floating bulk action tray with CSV export | [`components/views/PeopleView.tsx`](./components/views/PeopleView.tsx) |
 | **Payroll & PDF Export** | Keyboard-navigable teammate roster, 30-day PRNG timesheet matrix with staggered chip reveals, base + 1.5x overtime & deduction computation, pure client-side binary PDF 1.4 contract & payslip generator | [`components/views/PayrollView.tsx`](./components/views/PayrollView.tsx) |
-| **Modals & Tray** | Notification drawer with bell-shake trigger, Workspace Settings dialog (`localStorage` persisted), Invite Teammate dialog with field-shake validation, Demo Booking modal | [`components/modals/`](./components/modals/) |
-| **Persistence Engine** | WAL-mode `bun:sqlite` schema (`waitlist`, `inquiries`) with unique indexes, transactional inserts, health probes, and serverless fallback | [`lib/db.ts`](./lib/db.ts) |
+| **Modals & Tray** | Notification drawer with bell-shake trigger, Workspace Settings dialog (`localStorage` persisted), Invite Teammate dialog (`POST /api/people`) with field-shake validation, Demo Booking modal | [`components/modals/`](./components/modals/) |
+| **Persistence Engine** | WAL-mode `bun:sqlite` schema (`users`, `people`, `waitlist`, `inquiries`) with unique indexes, transactional inserts, health probes, and serverless fallback | [`lib/db.ts`](./lib/db.ts) |
 
 ---
 
 ## REST API Endpoints
 
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `GET` | [`/api/health`](https://grovia-motion-fullstack.netlify.app/api/health) | System status, Bun runtime version, uptime, and SQLite health check |
-| `GET` | [`/api/metrics`](https://grovia-motion-fullstack.netlify.app/api/metrics) | Live team/waitlist count, hiring pipeline distribution, and benchmark quartile |
-| `POST` | `/api/roi` | Zod-validated 12-month revenue projection & ROI multiple computation |
-| `GET`, `POST` | [`/api/waitlist`](https://grovia-motion-fullstack.netlify.app/api/waitlist) | List waitlist entries or book spot with case-insensitive deduplication (`409`) |
-| `GET`, `POST`, `PATCH` | [`/api/inquiries`](https://grovia-motion-fullstack.netlify.app/api/inquiries) | Create & manage support tickets (`GROV-XXXX`) with status transitions |
+| Method | Endpoint | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | [`/api/health`](https://grovia-motion-fullstack.netlify.app/api/health) | Public | System status, Bun runtime version, uptime, and SQLite health check |
+| `POST` | `/api/roi` | Public | Zod-validated 12-month revenue projection & ROI multiple computation |
+| `POST` | `/api/waitlist` | Public | Book waitlist spot with case-insensitive deduplication (`409`) |
+| `GET` | `/api/waitlist` | Authenticated | List waitlist entries and total queue count (`401` when unauthenticated) |
+| `POST` | `/api/auth/login` | Public | Authenticate user and set `HttpOnly` `grovia_session` cookie |
+| `POST` | `/api/auth/logout` | Public | Clear `grovia_session` cookie (`Max-Age=0`) |
+| `GET` | `/api/auth/session` | Authenticated | Inspect active session user (`200` authenticated, `401` unauthenticated) |
+| `GET`, `POST` | `/api/people` | Authenticated | List employee roster or invite teammate (`201` created, `409` duplicate email) |
+| `GET` | `/api/metrics` | Authenticated | Live team/waitlist count, hiring pipeline distribution, and benchmark quartile |
+| `GET`, `POST`, `PATCH` | `/api/inquiries` (& `/[id]`) | Authenticated | Create & manage support tickets (`GROV-XXXX`) with status transitions |
 
 <details>
 <summary>Quick API verification with <code>curl</code></summary>
@@ -111,11 +135,14 @@ cd grovia-app
 # 2. Install dependencies strictly via Bun
 bun install --frozen-lockfile
 
-# 3. Run development server
+# 3. (Optional) Configure custom session secret (falls back to dev secret locally)
+export AUTH_SECRET="replace-with-32-byte-secret"
+
+# 4. Run development server
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to explore the interactive workspace locally backed by `grovia.db` (`bun:sqlite`).
+Open [http://localhost:3000](http://localhost:3000) for the public landing page, sign in at [http://localhost:3000/login](http://localhost:3000/login) with `admin@grovia.io` / `grovia-demo-2026`, and access the authenticated workspace at [http://localhost:3000/workspace](http://localhost:3000/workspace) backed by `grovia.db` (`bun:sqlite`).
 
 ### Scripts & Quality Gates
 
@@ -125,7 +152,7 @@ Open [http://localhost:3000](http://localhost:3000) to explore the interactive w
 | `bun run build` | Production Next.js build |
 | `bun run lint` | Run ESLint (`next lint`) |
 | `bun run typecheck` | Strict TypeScript type checking (`tsc --noEmit`) |
-| `bun test` | Run all 235 tests across 28 suites (unit, E2E tiers 1–4) |
+| `bun test` | Run all 368 tests across 47 suites (unit, E2E tiers 1–4, live HTTP v2) |
 | `bun run doctor` | Execute `npx react-doctor@latest` (enforces `100 / 100` score) |
 | `bun run validate` | Full validation pipeline (`lint && typecheck && test && build && doctor`) |
 

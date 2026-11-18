@@ -1,8 +1,15 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { testClient } from '../harness/test-client';
 import { assertions } from '../harness/assertions';
 
 describe('Tier 2 — Boundary: SaaS Metrics Endpoint (F8)', () => {
+  beforeAll(async () => {
+    await testClient.loginAsAdmin();
+  });
+
+  afterAll(() => {
+    testClient.clearAuth();
+  });
   test('T2.5.1: POST request to /api/metrics returns HTTP 405 Method Not Allowed', async () => {
     const res = await testClient.post('/api/metrics', { action: 'override' });
     assertions.assertStatus(res, 405);

@@ -176,6 +176,7 @@ export function GrowthRoiCard() {
           <button
             className="chip-btn magnetic"
             type="submit"
+            aria-label="Recalculate ROI"
             disabled={isLoading}
             style={{ fontSize: '12px', padding: '6px 14px' }}
           >

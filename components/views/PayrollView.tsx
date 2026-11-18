@@ -128,7 +128,7 @@ export function PayrollView({ active, people }: PayrollViewProps) {
   };
 
   useEffect(() => {
-    if (isReducedMotion()) return;
+    if (!active || isReducedMotion()) return;
 
     if (heroAvRef.current) {
       gsap.fromTo(
@@ -162,7 +162,7 @@ export function PayrollView({ active, people }: PayrollViewProps) {
         );
       }
     }
-  }, [currentPersonIndex]);
+  }, [active, currentPersonIndex]);
 
   const handleDownloadDoc = (type: 'contract' | 'payslip') => {
     if (!currentPerson) return;

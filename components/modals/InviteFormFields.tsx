@@ -19,6 +19,7 @@ export interface InviteFormFieldsProps {
   setCity: (v: string) => void;
   errors: { name?: string; email?: string; role?: string };
   onClose: () => void;
+  isSubmitting?: boolean;
 }
 
 export function InviteFormFields({
@@ -37,6 +38,7 @@ export function InviteFormFields({
   setCity,
   errors,
   onClose,
+  isSubmitting = false,
 }: InviteFormFieldsProps) {
   return (
     <>
@@ -149,9 +151,9 @@ export function InviteFormFields({
         >
           Cancel
         </button>
-        <button className="dark-btn" type="submit">
+        <button className="dark-btn" type="submit" disabled={isSubmitting}>
           <Icon name="user-plus" className="ico" aria-hidden="true" />
-          Send invite
+          {isSubmitting ? 'Sending...' : 'Send invite'}
         </button>
       </footer>
     </>

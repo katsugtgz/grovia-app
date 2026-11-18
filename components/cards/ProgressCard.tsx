@@ -29,7 +29,7 @@ const formatDuration = (val: number): string =>
 export function ProgressCard() {
   const cardRef = useRef<HTMLElement>(null);
   const weekRef = useRef<HTMLUListElement>(null);
-  const tipRef = useRef<HTMLSpanElement>(null);
+  const tipRef = useRef<HTMLLIElement>(null);
   const [activeDayIdx, setActiveDayIdx] = useState(6); // Tuesday (today) is index 6
 
   const todayIndex = DAYS.findIndex((d) => d.today);
@@ -56,21 +56,28 @@ export function ProgressCard() {
         track.offsetTop + bar.offsetTop - tip.offsetHeight - 8
       );
 
-      gsap.to(tip, {
-        x: left,
-        y: top,
-        duration: animate ? $(0.45) : 0,
-        ease: 'power3.out',
-        overwrite: 'auto',
-      });
+      if (animate && !isReducedMotion()) {
+        gsap.to(tip, {
+          x: left,
+          y: top,
+          duration: $(0.45),
+          ease: 'power3.out',
+          overwrite: 'auto',
+        });
+      } else {
+        gsap.set(tip, { x: left, y: top });
+      }
 
-      setActiveDayIdx(index);
+      setActiveDayIdx((prev) => (prev === index ? prev : index));
     },
     []
   );
 
   useEffect(() => {
-    updateTooltip(todayIndex, false);
+    const id = requestAnimationFrame(() => {
+      updateTooltip(todayIndex, false);
+    });
+    return () => cancelAnimationFrame(id);
   }, [todayIndex, updateTooltip]);
 
   // Card hover lift and interaction listeners
@@ -157,14 +164,15 @@ export function ProgressCard() {
           );
         })}
 
-        <span
+        <li
           className="week__tip"
           id="week-tip"
+          style={{ listStyle: 'none' }}
           aria-live="polite"
           ref={tipRef}
         >
           5h 42m
-        </span>
+        </li>
       </ul>
     </article>
   );

@@ -11,20 +11,33 @@ import { OnboardingCard } from '@/components/cards/OnboardingCard';
 import { AccordionCard } from '@/components/cards/AccordionCard';
 import { CalendarCard } from '@/components/cards/CalendarCard';
 import { GrowthRoiCard } from '@/components/cards/GrowthRoiCard';
+import type { Person } from '@/lib/types';
 
 export interface OverviewViewProps {
   active: boolean;
   greetingName?: string;
+  people?: Person[];
 }
 
-export function OverviewView({ active, greetingName = 'Person 05' }: OverviewViewProps) {
+const EMPTY_PEOPLE: Person[] = [];
+
+export function OverviewView({
+  active,
+  greetingName = 'Person 05',
+  people = EMPTY_PEOPLE,
+}: OverviewViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const hasMountedRef = useRef(false);
 
   const greetingText = `Good morning, ${greetingName}`;
 
-  // Character split animation on mount or active change
+  // Character split animation on active/greeting change after initial SSR paint
   useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
     if (!active || isReducedMotion() || !titleRef.current) return;
 
     const chars = titleRef.current.querySelectorAll('.split-ch');
@@ -160,7 +173,7 @@ export function OverviewView({ active, greetingName = 'Person 05' }: OverviewVie
         <TimeTrackerCard />
         <OnboardingCard />
         <AccordionCard />
-        <CalendarCard />
+        <CalendarCard people={people} />
       </div>
 
       <div style={{ marginTop: 'var(--gap)' }}>

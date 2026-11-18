@@ -2,10 +2,14 @@ import { NextResponse } from 'next/server';
 import { WaitlistRequestSchema } from '@/lib/validations';
 import { addWaitlistEntry, getWaitlist, getWaitlistCount } from '@/lib/db';
 import { methodNotAllowed, parseJsonBody } from '@/lib/api-helpers';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
+
   try {
     const count = getWaitlistCount();
     const list = getWaitlist(100);

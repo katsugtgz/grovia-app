@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
+import { initSchema } from '@/lib/db';
 
 export class RouteNotFoundError extends Error {
   public routePath: string;
@@ -34,13 +35,102 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   params?: Record<string, string>;
   direct?: boolean;
+  skipAuth?: boolean;
 }
 
 export class TestClient {
   private baseUrl: string | null;
+  private cookies: Map<string, string> = new Map();
 
   constructor(baseUrl?: string) {
     this.baseUrl = baseUrl || process.env.E2E_BASE_URL || null;
+  }
+
+  clearAuth(): void {
+    this.cookies.clear();
+  }
+
+  getCookie(name: string): string | undefined {
+    return this.cookies.get(name);
+  }
+
+  setCookie(name: string, value: string): void {
+    this.cookies.set(name, value);
+  }
+
+  async login(email: string, password: string): Promise<TestResponse> {
+    return this.post('/api/auth/login', { email, password });
+  }
+
+  async loginAsAdmin(): Promise<TestResponse> {
+    const email = process.env.DEMO_ADMIN_EMAIL || 'admin@grovia.io';
+    const password = process.env.DEMO_ADMIN_PASSWORD || 'grovia-demo-2026';
+    const res = await this.login(email, password);
+    if (res.status !== 200) {
+      throw new Error(`loginAsAdmin failed (${res.status}): ${JSON.stringify(res.data)}`);
+    }
+    return res;
+  }
+
+  async logout(): Promise<TestResponse> {
+    const res = await this.post('/api/auth/logout');
+    this.clearAuth();
+    return res;
+  }
+
+  private applyCookies(headers: Headers, skipAuth?: boolean): void {
+    if (skipAuth || headers.has('cookie') || this.cookies.size === 0) {
+      return;
+    }
+    const serialized = Array.from(this.cookies.entries())
+      .map(([k, v]) => `${k}=${v}`)
+      .join('; ');
+    if (serialized) {
+      headers.set('cookie', serialized);
+    }
+  }
+
+  private captureSetCookies(headers: Headers): void {
+    const getSetCookie = (headers as unknown as { getSetCookie?: () => string[] }).getSetCookie;
+    const rawHeaders: string[] =
+      typeof getSetCookie === 'function'
+        ? getSetCookie.call(headers)
+        : headers.get('set-cookie')
+          ? [headers.get('set-cookie') as string]
+          : [];
+
+    for (const header of rawHeaders) {
+      if (!header) continue;
+      const parts = header.split(';').map((p) => p.trim());
+      const nameValue = parts[0];
+      if (!nameValue) continue;
+      const eqIdx = nameValue.indexOf('=');
+      if (eqIdx <= 0) continue;
+      const name = nameValue.slice(0, eqIdx).trim();
+      const value = nameValue.slice(eqIdx + 1).trim();
+
+      let shouldDelete = value.length === 0;
+      for (const attr of parts.slice(1)) {
+        const lower = attr.toLowerCase();
+        if (lower.startsWith('max-age=')) {
+          const maxAge = Number(lower.slice('max-age='.length).trim());
+          if (!Number.isNaN(maxAge) && maxAge <= 0) {
+            shouldDelete = true;
+          }
+        } else if (lower.startsWith('expires=')) {
+          const expiresAt = Date.parse(attr.slice('expires='.length).trim());
+          if (!Number.isNaN(expiresAt) && expiresAt <= Date.now()) {
+            shouldDelete = true;
+          }
+        }
+      }
+
+      if (shouldDelete) {
+        this.cookies.delete(name);
+      } else {
+        this.cookies.set(name, value);
+      }
+    }
   }
 
   async get<T = any>(endpoint: string, options?: RequestOptions): Promise<TestResponse<T>> {
@@ -82,6 +172,7 @@ export class TestClient {
   ): Promise<TestResponse<T>> {
     const url = new URL(endpoint, this.baseUrl!);
     const headers = new Headers(options.headers || {});
+    this.applyCookies(headers, options.skipAuth);
 
     let reqBody: string | undefined = undefined;
     if (body !== undefined) {
@@ -151,6 +242,7 @@ export class TestClient {
     }
 
     const headers = new Headers(options.headers || {});
+    this.applyCookies(headers, options.skipAuth);
     let reqBody: string | undefined = undefined;
     if (body !== undefined) {
       if (typeof body === 'string') {
@@ -215,6 +307,10 @@ export class TestClient {
       '/api/roi': 'app/api/roi/route',
       '/api/waitlist': 'app/api/waitlist/route',
       '/api/inquiries': 'app/api/inquiries/route',
+      '/api/auth/login': 'app/api/auth/login/route',
+      '/api/auth/logout': 'app/api/auth/logout/route',
+      '/api/auth/session': 'app/api/auth/session/route',
+      '/api/people': 'app/api/people/route',
     };
 
     if (staticMap[cleanPath]) {
@@ -256,6 +352,7 @@ export class TestClient {
   }
 
   private async parseResponse<T>(res: Response): Promise<TestResponse<T>> {
+    this.captureSetCookies(res.headers);
     let data: any = null;
     const contentType = res.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
@@ -284,17 +381,41 @@ export class TestClient {
 
 export const testClient = new TestClient();
 
+export function createTestClient(baseUrl?: string): TestClient {
+  return new TestClient(baseUrl);
+}
+
 /**
  * DB helper for test isolation
  */
 export function resetDatabase(dbPath?: string): void {
+  let db: Database | null = null;
   try {
-    const target = dbPath || process.env.DATABASE_URL || 'grovia.db';
-    const db = new Database(target);
-    db.run('DELETE FROM waitlist;');
-    db.run('DELETE FROM inquiries;');
-    db.close();
+    const target =
+      dbPath ||
+      process.env.DB_PATH ||
+      process.env.DATABASE_PATH ||
+      process.env.DATABASE_URL ||
+      'grovia.db';
+    db = new Database(target);
+    try {
+      db.run('DELETE FROM waitlist;');
+    } catch {}
+    try {
+      db.run('DELETE FROM inquiries;');
+    } catch {}
+    try {
+      db.run("DELETE FROM users WHERE LOWER(email) != 'admin@grovia.io';");
+    } catch {}
+    try {
+      db.run("DELETE FROM people WHERE id NOT IN ('0','1','2','3','4','5','6','7','8','9');");
+    } catch {}
+    initSchema(db);
   } catch {
     // Database tables might not be created yet
+  } finally {
+    try {
+      db?.close();
+    } catch {}
   }
 }

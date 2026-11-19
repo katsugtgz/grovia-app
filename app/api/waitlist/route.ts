@@ -10,6 +10,25 @@ export async function GET(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
 
+  const isUnoptedProductionDemoSession =
+    process.env.NODE_ENV === 'production' &&
+    process.env.ALLOW_DEMO_ADMIN !== '1' &&
+    !process.env.ADMIN_PASSWORD?.trim() &&
+    auth.user.email.toLowerCase() === 'admin@grovia.io';
+
+  if (auth.user.role !== 'admin' || isUnoptedProductionDemoSession) {
+    return NextResponse.json(
+      { success: false, error: 'Forbidden' },
+      {
+        status: 403,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    );
+  }
+
   try {
     const count = getWaitlistCount();
     const list = getWaitlist(100);

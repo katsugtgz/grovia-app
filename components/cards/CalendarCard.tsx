@@ -21,7 +21,7 @@ export interface CalendarEvent {
   title: string;
   sub: string;
   tone: string;
-  who: number[];
+  who: string[];
 }
 
 export interface CalendarWeek {
@@ -46,7 +46,7 @@ const WEEKS: CalendarWeek[] = [
         title: 'Design crit',
         sub: 'Pricing page v3',
         tone: 'dark',
-        who: [0, 5],
+        who: ['0', '5'],
       },
       {
         id: 'w0-e1',
@@ -57,7 +57,7 @@ const WEEKS: CalendarWeek[] = [
         title: 'Payroll close',
         sub: 'September run',
         tone: 'honey',
-        who: [4],
+        who: ['4'],
       },
     ],
   },
@@ -76,7 +76,7 @@ const WEEKS: CalendarWeek[] = [
         title: 'Weekly team sync',
         sub: 'Priorities for the sprint',
         tone: 'dark',
-        who: [4, 2, 6],
+        who: ['4', '2', '6'],
       },
       {
         id: 'w1-e1',
@@ -87,7 +87,7 @@ const WEEKS: CalendarWeek[] = [
         title: 'Onboarding session',
         sub: 'Welcome Person 02 & Person 04',
         tone: '',
-        who: [1, 3],
+        who: ['1', '3'],
       },
       {
         id: 'w1-e2',
@@ -98,7 +98,7 @@ const WEEKS: CalendarWeek[] = [
         title: '1:1 with Person 01',
         sub: 'Growth plan',
         tone: 'honey',
-        who: [0],
+        who: ['0'],
       },
     ],
   },
@@ -115,7 +115,7 @@ const WEEKS: CalendarWeek[] = [
         title: 'Q4 kickoff',
         sub: 'All hands · Studio',
         tone: 'dark',
-        who: [4, 0, 8],
+        who: ['4', '0', '8'],
       },
       {
         id: 'w2-e1',
@@ -126,7 +126,7 @@ const WEEKS: CalendarWeek[] = [
         title: 'Offsite planning',
         sub: 'Porto, November',
         tone: '',
-        who: [7, 9],
+        who: ['7', '9'],
       },
     ],
   },
@@ -325,12 +325,12 @@ export function CalendarCard({ people = EMPTY_PEOPLE }: CalendarCardProps) {
               <small>{ev.sub}</small>
             </span>
             <span className="avatars">
-              {ev.who.map((personIdx) => {
-                const person = people[personIdx];
+              {ev.who.map((personId) => {
+                const person = people.find((p) => p.id === personId);
                 const av = person?.av ?? '#cfe0c8';
                 return (
                   <span
-                    key={`ev-av-${ev.id}-${personIdx}`}
+                    key={`ev-av-${ev.id}-${personId}`}
                     className="avatar"
                     style={{ '--av': av } as React.CSSProperties}
                     aria-hidden="true"

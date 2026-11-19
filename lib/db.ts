@@ -81,8 +81,62 @@ declare global {
   var __grovia_dummy_stores__: DummyStores | undefined;
 }
 
+function getDummyStoreSnapshotPath(): string | null {
+  const rawPath =
+    globalThis.__grovia_db_path__ ||
+    process.env.DB_PATH ||
+    process.env.DATABASE_PATH ||
+    process.env.DATABASE_URL ||
+    '';
+  const trimmed = rawPath.trim();
+  if (!trimmed || trimmed === ':memory:') return null;
+  const normalized = trimmed.startsWith('file:') ? trimmed.slice(5) : trimmed;
+  return path.isAbsolute(normalized)
+    ? `${normalized}.store.json`
+    : path.resolve(process.cwd(), `${normalized}.store.json`);
+}
+
+function persistDummyStores(stores: DummyStores): void {
+  const snapshotPath = getDummyStoreSnapshotPath();
+  if (!snapshotPath) {
+    const rawPath =
+      globalThis.__grovia_db_path__ ||
+      process.env.DB_PATH ||
+      process.env.DATABASE_PATH ||
+      process.env.DATABASE_URL ||
+      '';
+    if (rawPath.trim() === ':memory:' || process.env.NODE_ENV === 'test') {
+      return;
+    }
+    throw new Error(
+      'Persistent storage path is not configured for non-Bun runtime; refusing non-durable write'
+    );
+  }
+
+  const dir = path.dirname(snapshotPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const tmpPath = `${snapshotPath}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(stores), 'utf8');
+  fs.renameSync(tmpPath, snapshotPath);
+}
+
 function getDummyStores(): DummyStores {
   if (!globalThis.__grovia_dummy_stores__) {
+    const snapshotPath = getDummyStoreSnapshotPath();
+    if (snapshotPath && fs.existsSync(snapshotPath)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(snapshotPath, 'utf8')) as DummyStores;
+        if (parsed && Array.isArray(parsed.people) && Array.isArray(parsed.waitlist)) {
+          globalThis.__grovia_dummy_stores__ = parsed;
+          return globalThis.__grovia_dummy_stores__;
+        }
+      } catch {
+        // Fall back to baseline seed state if snapshot is unreadable
+      }
+    }
+
     const initialWaitlist: DummyWaitlistRow[] = [
       {
         id: 1,
@@ -274,7 +328,7 @@ function getDatabaseConstructor(): typeof Database {
                   if (dupEmail) throw new Error('UNIQUE constraint failed: people.email');
                   throw new Error('UNIQUE constraint failed: people.id');
                 }
-                stores.people.push({
+                const newPersonRow: DummyPersonRow = {
                   id,
                   name: String(params[1] ?? ''),
                   role: String(params[2] ?? ''),
@@ -290,7 +344,14 @@ function getDatabaseConstructor(): typeof Database {
                   bday: params[12] != null ? String(params[12]) : 'Not provided',
                   look_json: params[13] != null ? String(params[13]) : null,
                   created_at: now,
-                });
+                };
+                stores.people.push(newPersonRow);
+                try {
+                  persistDummyStores(stores);
+                } catch (persistErr) {
+                  stores.people.pop();
+                  throw persistErr;
+                }
                 return { changes: 1, lastInsertRowid: stores.people.length };
               }
 
@@ -561,15 +622,28 @@ export function initSchema(database: Database): void {
 }
 
 export function ensureAuthAndPeopleSeeded(database: Database): void {
-  const existingAdmin = database
-    .prepare('SELECT id FROM users WHERE LOWER(email) = ?')
-    .get('admin@grovia.io');
+  const adminEmail = (process.env.ADMIN_EMAIL || 'admin@grovia.io').trim().toLowerCase();
+  const configuredAdminPassword = process.env.ADMIN_PASSWORD?.trim();
+  const allowDemoAdmin =
+    process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_ADMIN === '1';
+  const adminPassword =
+    configuredAdminPassword && configuredAdminPassword.length > 0
+      ? configuredAdminPassword
+      : allowDemoAdmin
+        ? 'grovia-demo-2026'
+        : null;
 
-  if (!existingAdmin) {
-    const adminHash = hashPassword('grovia-demo-2026');
-    database
-      .prepare('INSERT OR IGNORE INTO users (email, name, role, password_hash) VALUES (?, ?, ?, ?)')
-      .run('admin@grovia.io', 'Alex Rivera', 'admin', adminHash);
+  if (adminPassword) {
+    const existingAdmin = database
+      .prepare('SELECT id FROM users WHERE LOWER(email) = ?')
+      .get(adminEmail);
+
+    if (!existingAdmin) {
+      const adminHash = hashPassword(adminPassword);
+      database
+        .prepare('INSERT OR IGNORE INTO users (email, name, role, password_hash) VALUES (?, ?, ?, ?)')
+        .run(adminEmail, 'Alex Rivera', 'admin', adminHash);
+    }
   }
 
   const insertPerson = database.prepare(`

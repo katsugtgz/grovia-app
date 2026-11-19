@@ -91,18 +91,25 @@ export function WaitlistForm({ teamSize: controlledTeamSize, onTeamSizeChange }:
       return;
     }
 
+    const submittedSnapshot = { ...activeValues };
     setFieldErrors({});
     setIsSubmitting(true);
 
     try {
-      const result = await submitWaitlistRequest(activeValues);
+      const result = await submitWaitlistRequest(submittedSnapshot);
       if (result.ok) {
         setConfirmation({
           position: result.position,
           message: result.message,
-          email: activeValues.email.trim().toLowerCase(),
+          email: submittedSnapshot.email.trim().toLowerCase(),
         });
-        setValues((prev) => ({ ...prev, name: '', email: '', company: '', useCase: '' }));
+        setValues((prev) => ({
+          ...prev,
+          name: prev.name === submittedSnapshot.name ? '' : prev.name,
+          email: prev.email === submittedSnapshot.email ? '' : prev.email,
+          company: prev.company === submittedSnapshot.company ? '' : prev.company,
+          useCase: prev.useCase === submittedSnapshot.useCase ? '' : prev.useCase,
+        }));
         return;
       }
 
@@ -110,6 +117,7 @@ export function WaitlistForm({ teamSize: controlledTeamSize, onTeamSizeChange }:
         setFieldErrors({ email: result.error });
         shakeElement(emailRef.current);
         emailRef.current?.focus();
+        return;
       }
       setFormError(result.error);
     } finally {

@@ -80,7 +80,7 @@ describe('Tier 1 — F2: Login Page (/login) & Auth/Session Engine', () => {
     expect(body.user.role).toBe('admin');
   });
 
-  test('T1.v2.2.3: POST /api/auth/login sets grovia_session cookie with HttpOnly, SameSite=Lax, Path=/, Max-Age=86400 and no Secure over HTTP', async () => {
+  test('T1.v2.2.3: POST /api/auth/login sets grovia_session cookie with HttpOnly, SameSite=Lax, Path=/, Max-Age=86400 and protocol-appropriate Secure flag', async () => {
     const client = getServer().createClient();
     const res = await client.login();
 
@@ -90,6 +90,7 @@ describe('Tier 1 — F2: Login Page (/login) & Auth/Session Engine', () => {
     );
     expect(sessionHeader).toBeDefined();
 
+    const isHttps = new URL(getServer().baseUrl).protocol === 'https:';
     const stored = client.jar.get('grovia_session');
     expect(stored).toBeDefined();
     expect(stored?.value.length).toBeGreaterThan(0);
@@ -97,7 +98,8 @@ describe('Tier 1 — F2: Login Page (/login) & Auth/Session Engine', () => {
     expect(stored?.sameSite?.toLowerCase()).toBe('lax');
     expect(stored?.path).toBe('/');
     expect(stored?.maxAge).toBe(86400);
-    expect(stored?.secure).toBe(false);
+    expect(stored?.secure).toBe(isHttps);
+    expect(/;\s*secure\b/i.test(sessionHeader ?? '')).toBe(isHttps);
   });
 
   test('T1.v2.2.4: GET /api/auth/session with valid grovia_session returns 200 authenticated user', async () => {
@@ -129,10 +131,11 @@ describe('Tier 1 — F2: Login Page (/login) & Auth/Session Engine', () => {
     expect(res.data.error.length).toBeGreaterThan(0);
   });
 
-  test('T1.v2.2.6: POST /api/auth/logout clears grovia_session cookie (Max-Age=0) and invalidates subsequent session checks', async () => {
+  test('T1.v2.2.6: POST /api/auth/logout clears grovia_session cookie (Max-Age=0) and invalidates subsequent session checks including replayed tokens', async () => {
     const client = getServer().createClient();
     expect((await client.login()).status).toBe(200);
-    expect(client.jar.has('grovia_session')).toBe(true);
+    const preLogoutToken = client.jar.get('grovia_session')?.value ?? '';
+    expect(preLogoutToken.length).toBeGreaterThan(0);
 
     const logoutRes = await client.logout<LogoutResponse>();
     expect(logoutRes.status).toBe(200);
@@ -148,6 +151,13 @@ describe('Tier 1 — F2: Login Page (/login) & Auth/Session Engine', () => {
     const afterSession = await client.get<SessionErrorResponse>('/api/auth/session');
     expect(afterSession.status).toBe(401);
     expect(afterSession.data.authenticated).toBe(false);
+
+    // Server-side revocation: replaying the pre-logout cookie must also be rejected
+    const replayedSession = await client.get<SessionErrorResponse>('/api/auth/session', {
+      headers: { Cookie: `grovia_session=${preLogoutToken}` },
+    });
+    expect(replayedSession.status).toBe(401);
+    expect(replayedSession.data.authenticated).toBe(false);
   });
 
   test('T1.v2.2.7: POST /api/auth/login normalizes email casing and surrounding whitespace', async () => {

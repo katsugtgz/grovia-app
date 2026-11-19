@@ -137,12 +137,13 @@ describe('Unit — M3 Workspace Migration, Public Landing Mount, PII Decoupling 
   });
 
   describe('NotificationTray & CalendarCard People Prop-Drilling', () => {
-    test('NotificationTray renders prop-drilled people and handles empty people array safely', () => {
+    test('NotificationTray renders prop-drilled people by stable personId even when new hires are prepended, and handles empty people safely', () => {
       const customPeople: Person[] = [
-        { ...SAMPLE_PEOPLE[0], id: 'c0', name: 'Custom Zero' },
-        { ...SAMPLE_PEOPLE[1], id: 'c1', name: 'Custom One' },
-        { ...SAMPLE_PEOPLE[2], id: 'c2', name: 'Custom Two' },
-        { ...SAMPLE_PEOPLE[3], id: 'c3', name: 'Custom Three' },
+        { ...SAMPLE_PEOPLE[0], id: 'n-new', name: 'Prepended Invite' },
+        { ...SAMPLE_PEOPLE[0], id: '0', name: 'Custom Zero' },
+        { ...SAMPLE_PEOPLE[1], id: '1', name: 'Custom One' },
+        { ...SAMPLE_PEOPLE[2], id: '2', name: 'Custom Two' },
+        { ...SAMPLE_PEOPLE[3], id: '3', name: 'Custom Three' },
       ];
 
       const htmlWithPeople = renderToStaticMarkup(
@@ -155,6 +156,7 @@ describe('Unit — M3 Workspace Migration, Public Landing Mount, PII Decoupling 
       expect(htmlWithPeople).toContain('Custom One');
       expect(htmlWithPeople).toContain('Custom Two');
       expect(htmlWithPeople).toContain('Custom Three');
+      expect(htmlWithPeople).not.toContain('Prepended Invite');
 
       const htmlEmpty = renderToStaticMarkup(
         React.createElement(NotificationTray, {

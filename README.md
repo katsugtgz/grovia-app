@@ -5,7 +5,7 @@
     <td width="50%" align="center">
       <img src="./public/showcase/01-overview-bento.gif" alt="Overview Bento Grid, Stopwatch Dial, 3D Tilt & Onboarding Particles (30fps)" width="100%" />
       <br />
-      <sub><b>1. Overview Bento & Physics</b> — Cascading entrance, 3D tilt, SVG stopwatch, 14-particle burst</sub>
+      <sub><b>1. Overview Bento & Physics</b> — Zero-delay LCP shell, 3D tilt, SVG stopwatch, 14-particle burst</sub>
     </td>
     <td width="50%" align="center">
       <img src="./public/showcase/02-people-flip.gif" alt="People Directory GSAP Flip Morphing, Search & Action Tray (30fps)" width="100%" />
@@ -52,11 +52,11 @@
 
 ## Highlights
 
-- **Exact Grovia Aesthetic & Motion Choreography**: Warm sage-green Bento surfaces (`38px` / `28px` radii, inset white hairline elevation), Outfit & Inter typography, 31-glyph SVG sprite (`Icon.tsx`), sliding navigation pill with direction-aware `capL` / `mid` / `capR` GSAP delays, and a `1.6s` cascading entrance timeline.
+- **Exact Grovia Aesthetic & Motion Choreography**: Warm sage-green Bento surfaces (`38px` / `28px` radii, inset white hairline elevation), Outfit & Inter typography, 31-glyph SVG sprite (`Icon.tsx`), sliding navigation pill with direction-aware `capL` / `mid` / `capR` GSAP delays, and an immediate zero-opacity-delay shell render (LCP optimization) while preserving interactive GSAP view transitions.
 - **Compositor-Only Physics & `prefers-reduced-motion` Safety**: All animations strictly animate GPU-composited `transform` and `opacity` properties via GSAP 3.15 (`Flip`, `quickTo`, `power3.out`, `back.out`, `elastic.out`) and automatically snap when `prefers-reduced-motion: reduce` is enabled.
 - **Fullstack Next.js 15 Route Handlers + Bun SQLite (`WAL`)**: Real API persistence for waitlist signups, support inquiries/tickets, hiring pipeline metrics, and dynamic 12-month ROI modeling (`bun:sqlite` locally, with seamless in-memory serverless fallback on Netlify Node runtimes).
 - **Google Chrome Modern Web Guidance Aligned**: LCP portrait prioritization (`priority`), non-blocking interactions (INP-friendly transitions), CLS containment, native `<dialog>` modals with ESC/backdrop closing, and semantic ARIA landmarks/tablists.
-- **Zero-Defect Verification**: `368/368` passing tests across 47 suites (unit, contract, integration, and live HTTP E2E tiers 1–4), strict ESLint + TypeScript checks, automated GitHub Actions CI & Netlify CD, and **`100 / 100 Great`** on `npx react-doctor@latest`.
+- **Zero-Defect Verification**: `381/381` passing tests across 48 suites (unit, contract, integration, stress, and live HTTP E2E tiers 1–4), strict ESLint + TypeScript checks, automated GitHub Actions CI & Netlify CD, and **`100 / 100 Great`** on `npx react-doctor@latest`.
 
 ---
 
@@ -72,8 +72,8 @@
   - **Email**: `admin@grovia.io`
   - **Password**: `grovia-demo-2026`
 - **Session Signing (`AUTH_SECRET`)**:
-  - Edge-compatible Web Crypto HMAC-SHA256 stateless `grovia_session` cookie (`HttpOnly; SameSite=Lax; Path=/; Max-Age=86400`).
-  - Configure `AUTH_SECRET` (or `SESSION_SECRET`) in production environments; falls back to a deterministic development secret for local dev and zero-secret CI runs.
+  - Edge-compatible Web Crypto HMAC-SHA256 stateless `grovia_session` cookie (`HttpOnly; SameSite=Lax; Path=/; Max-Age=86400`) with server-side revocation on logout.
+  - `AUTH_SECRET` (or `SESSION_SECRET`) is **required in production** (fails closed if unset); falls back to a deterministic development secret only in non-production (`development`/`test`) environments. Demo admin seeding in production is disabled unless `ALLOW_DEMO_ADMIN=1` is explicitly configured.
 
 ---
 
@@ -152,9 +152,10 @@ Open [http://localhost:3000](http://localhost:3000) for the public landing page,
 | `bun run build` | Production Next.js build |
 | `bun run lint` | Run ESLint (`next lint`) |
 | `bun run typecheck` | Strict TypeScript type checking (`tsc --noEmit`) |
-| `bun test` | Run all 368 tests across 47 suites (unit, E2E tiers 1–4, live HTTP v2) |
+| `bun run test` | Run core template/helper tests (`tests/core.test.ts`, invoked by `bun run validate`) |
+| `bun test` / `bun run test:all` | Run all 381 tests across 48 suites (unit, stress, E2E tiers 1–4, live HTTP v2) |
 | `bun run doctor` | Execute `npx react-doctor@latest` (enforces `100 / 100` score) |
-| `bun run validate` | Full validation pipeline (`lint && typecheck && test && build && doctor`) |
+| `bun run validate` | Fast validation pipeline (`lint && typecheck && test && build && doctor`); run `bun test` for the full 48-suite run |
 
 ---
 

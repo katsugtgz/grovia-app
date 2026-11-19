@@ -2,14 +2,22 @@ import { NextResponse } from 'next/server';
 import { methodNotAllowed, parseJsonBody } from '@/lib/api-helpers';
 import { setSessionCookie, signSessionToken } from '@/lib/auth';
 import { findUserByEmail } from '@/lib/db';
-import { verifyPassword } from '@/lib/password';
+import {
+  clearFailedLoginAttempts,
+  extractClientIp,
+  isLoginRateLimited,
+  recordFailedLoginAttempt,
+} from '@/lib/login-rate-limit';
+import { hashPassword, verifyPasswordAsync } from '@/lib/password';
 import type { AuthUser } from '@/lib/types';
 import { LoginRequestSchema } from '@/lib/validations';
 
 export const dynamic = 'force-dynamic';
 
+const DUMMY_PASSWORD_HASH = hashPassword('grovia-timing-guard-dummy-password-2026');
+
 export async function POST(request: Request): Promise<Response> {
-  const { data: rawBody, error: parseError } = await parseJsonBody(request);
+  const { data: rawBody, error: parseError } = await parseJsonBody(request, 16 * 1024);
   if (parseError) return parseError;
 
   const parsed = LoginRequestSchema.safeParse(rawBody);
@@ -30,9 +38,33 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  const clientIp = extractClientIp(request);
+  const now = Date.now();
+  const rateCheck = isLoginRateLimited(clientIp, parsed.data.email, now);
+  if (rateCheck.limited) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Too many sign-in attempts. Please try again later.',
+      },
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, max-age=0',
+          'Retry-After': String(rateCheck.retryAfterSec),
+        },
+      }
+    );
+  }
+
   try {
     const user = findUserByEmail(parsed.data.email);
-    if (!user || !verifyPassword(parsed.data.password, user.password_hash)) {
+    const targetHash = user ? user.password_hash : DUMMY_PASSWORD_HASH;
+    const isPasswordValid = await verifyPasswordAsync(parsed.data.password, targetHash);
+
+    if (!user || !isPasswordValid) {
+      recordFailedLoginAttempt(clientIp, parsed.data.email, Date.now());
       return NextResponse.json(
         { success: false, error: 'Invalid email or password' },
         {
@@ -44,6 +76,8 @@ export async function POST(request: Request): Promise<Response> {
         }
       );
     }
+
+    clearFailedLoginAttempts(clientIp, parsed.data.email);
 
     const sessionUser: AuthUser = {
       id: user.id,
@@ -65,9 +99,10 @@ export async function POST(request: Request): Promise<Response> {
     );
 
     return setSessionCookie(response, token, request);
-  } catch (err: any) {
+  } catch (err: unknown) {
+    console.error('[api/auth/login] POST failed:', err);
     return NextResponse.json(
-      { success: false, error: err?.message || 'Authentication failed' },
+      { success: false, error: 'Authentication failed' },
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { CookieJar, startLiveServer, type LiveServerHandle } from '../../harness/live-http';
+import crypto from 'node:crypto';
+import {
+  CookieJar,
+  isSameServerOrigin,
+  startLiveServer,
+  type LiveServerHandle,
+} from '../../harness/live-http';
 
 interface ErrorBody {
   success: boolean;
@@ -19,6 +25,22 @@ function encodeBase64Url(value: string): string {
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/g, '');
+}
+
+function signLiveSessionToken(payload: Record<string, unknown>): string {
+  const secret =
+    process.env.AUTH_SECRET ||
+    process.env.SESSION_SECRET ||
+    'grovia-e2e-live-test-secret-2026';
+  const payloadB64 = encodeBase64Url(JSON.stringify(payload));
+  const sigB64 = crypto
+    .createHmac('sha256', secret)
+    .update(payloadB64)
+    .digest('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+  return `${payloadB64}.${sigB64}`;
 }
 
 let server: LiveServerHandle | undefined;
@@ -55,7 +77,7 @@ async function assertSessionTokenRejected(tokenValue: string): Promise<void> {
   const workspaceRes = await client.get<string>('/workspace', { headers });
   expect(workspaceRes.status).toBe(307);
   const loc = new URL(workspaceRes.location ?? '', getServer().baseUrl);
-  expect(['127.0.0.1', 'localhost']).toContain(loc.hostname);
+  expect(isSameServerOrigin(loc, getServer().baseUrl)).toBe(true);
   expect(loc.pathname).toBe('/login');
 }
 
@@ -95,17 +117,34 @@ describe('Tier 2 — F2 Boundaries: Tampered/Expired/Malformed Cookies & Auth Er
 
   test('T2.v2.2.3: Expired grovia_session token claims and CookieJar Max-Age/Expires/Secure rules are rejected', async () => {
     const validToken = await obtainValidSessionToken();
-    const dotIdx = validToken.lastIndexOf('.');
-    const sigPart = dotIdx !== -1 ? validToken.slice(dotIdx + 1) : 'invalidsig';
-    const expiredPayload = encodeBase64Url(
-      JSON.stringify({
-        sub: 'admin-1',
-        email: 'admin@grovia.io',
-        role: 'admin',
-        exp: 1,
-      })
+    const nowSec = Math.floor(Date.now() / 1000);
+    const controlToken = signLiveSessionToken({
+      id: 1,
+      email: 'admin@grovia.io',
+      name: 'Alex Rivera',
+      role: 'admin',
+      iat: nowSec - 10,
+      exp: nowSec + 3600,
+    });
+    const controlClient = getServer().createClient();
+    const controlRes = await controlClient.get<{ success: boolean; authenticated: boolean }>(
+      '/api/auth/session',
+      {
+        headers: { Cookie: `grovia_session=${controlToken}` },
+      }
     );
-    await assertSessionTokenRejected(`${expiredPayload}.${sigPart}`);
+    expect(controlRes.status).toBe(200);
+    expect(controlRes.data.authenticated).toBe(true);
+
+    const expiredToken = signLiveSessionToken({
+      id: 1,
+      email: 'admin@grovia.io',
+      name: 'Alex Rivera',
+      role: 'admin',
+      iat: nowSec - 120,
+      exp: nowSec - 60,
+    });
+    await assertSessionTokenRejected(expiredToken);
 
     const jar = new CookieJar();
     jar.captureFromResponse(
@@ -218,17 +257,17 @@ describe('Tier 2 — F2 Boundaries: Tampered/Expired/Malformed Cookies & Auth Er
     for (const method of ['GET', 'PUT', 'PATCH', 'DELETE'] as const) {
       const loginRes = await client.request<ErrorBody>(method, '/api/auth/login');
       expect(loginRes.status).toBe(405);
-      expect(loginRes.headers.get('allow')).toContain('POST');
+      expect(loginRes.headers.get('allow')?.trim()).toBe('POST');
 
       const logoutRes = await client.request<ErrorBody>(method, '/api/auth/logout');
       expect(logoutRes.status).toBe(405);
-      expect(logoutRes.headers.get('allow')).toContain('POST');
+      expect(logoutRes.headers.get('allow')?.trim()).toBe('POST');
     }
 
     for (const method of ['POST', 'PUT', 'PATCH', 'DELETE'] as const) {
       const sessionRes = await client.request<ErrorBody>(method, '/api/auth/session');
       expect(sessionRes.status).toBe(405);
-      expect(sessionRes.headers.get('allow')).toContain('GET');
+      expect(sessionRes.headers.get('allow')?.trim()).toBe('GET');
     }
   });
 });

@@ -1,5 +1,9 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { startLiveServer, type LiveServerHandle } from '../../harness/live-http';
+import {
+  isSameServerOrigin,
+  startLiveServer,
+  type LiveServerHandle,
+} from '../../harness/live-http';
 
 interface AuthResponse {
   success: boolean;
@@ -44,7 +48,7 @@ describe('Tier 3 — Combinations: Redirect & Login Handoff (T3.v2.4)', () => {
     const unauthWs = await visitor.get('/workspace');
     expect(unauthWs.status).toBe(307);
     const loginLoc = parseRedirectLocation(unauthWs.location, live.baseUrl);
-    expect(['127.0.0.1', 'localhost']).toContain(loginLoc.hostname);
+    expect(isSameServerOrigin(loginLoc, live.baseUrl)).toBe(true);
     expect(loginLoc.pathname).toBe('/login');
     expect(loginLoc.searchParams.get('next')).toBe('/workspace');
 
@@ -60,7 +64,7 @@ describe('Tier 3 — Combinations: Redirect & Login Handoff (T3.v2.4)', () => {
     const authedLogin = await visitor.get('/login');
     expect(authedLogin.status).toBe(307);
     const wsLoc = parseRedirectLocation(authedLogin.location, live.baseUrl);
-    expect(['127.0.0.1', 'localhost']).toContain(wsLoc.hostname);
+    expect(isSameServerOrigin(wsLoc, live.baseUrl)).toBe(true);
     expect(wsLoc.pathname).toBe('/workspace');
 
     const authedWs = await visitor.get('/workspace');
@@ -80,7 +84,7 @@ describe('Tier 3 — Combinations: Redirect & Login Handoff (T3.v2.4)', () => {
     const lockedWs = await client.get('/workspace');
     expect(lockedWs.status).toBe(307);
     const lockedLoc = parseRedirectLocation(lockedWs.location, live.baseUrl);
-    expect(['127.0.0.1', 'localhost']).toContain(lockedLoc.hostname);
+    expect(isSameServerOrigin(lockedLoc, live.baseUrl)).toBe(true);
     expect(lockedLoc.pathname).toBe('/login');
     expect(lockedLoc.searchParams.get('next')).toBe('/workspace');
 
@@ -103,14 +107,14 @@ describe('Tier 3 — Combinations: Redirect & Login Handoff (T3.v2.4)', () => {
     expect(maliciousRedirect.status).toBe(307);
 
     const loc = parseRedirectLocation(maliciousRedirect.location, live.baseUrl);
-    expect(['127.0.0.1', 'localhost']).toContain(loc.hostname);
+    expect(isSameServerOrigin(loc, live.baseUrl)).toBe(true);
     expect(loc.hostname).not.toBe('evil.com');
     expect(loc.pathname).toBe('/workspace');
 
     const safeRedirect = await admin.get('/login?next=%2Fworkspace');
     expect(safeRedirect.status).toBe(307);
     const safeLoc = parseRedirectLocation(safeRedirect.location, live.baseUrl);
-    expect(['127.0.0.1', 'localhost']).toContain(safeLoc.hostname);
+    expect(isSameServerOrigin(safeLoc, live.baseUrl)).toBe(true);
     expect(safeLoc.pathname).toBe('/workspace');
   });
 });

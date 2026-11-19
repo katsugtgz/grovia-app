@@ -260,8 +260,8 @@ export interface AuthSessionResponse {
 
 export interface PeopleListResponse {
   success: boolean;
-  people: Person[];
-  count: number;
+  people?: Person[];
+  count?: number;
   error?: string;
 }
 

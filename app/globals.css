@@ -2990,7 +2990,7 @@ textarea.field__input[aria-invalid="true"] {
   font-size: 12px;
 }
 
-@media (width<=1024px) {
+@media (max-width: 1024px) {
   .landing-bento {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3000,7 +3000,7 @@ textarea.field__input[aria-invalid="true"] {
   }
 }
 
-@media (width<=900px) {
+@media (max-width: 900px) {
   .landing__nav {
     order: 3;
     justify-content: space-between;
@@ -3020,7 +3020,7 @@ textarea.field__input[aria-invalid="true"] {
   }
 }
 
-@media (width<=640px) {
+@media (max-width: 640px) {
   .landing-bento,
   .landing-preview__grid {
     grid-template-columns: minmax(0, 1fr);

@@ -60,7 +60,9 @@ export async function submitInvitePersonRequest(
     role: input.role.trim(),
     team: input.team,
     city: input.city?.trim() || 'Remote',
-    ...(typeof input.rate === 'number' ? { rate: input.rate } : {}),
+    ...(typeof input.rate === 'number' && Number.isFinite(input.rate)
+      ? { rate: input.rate }
+      : {}),
   };
 
   try {

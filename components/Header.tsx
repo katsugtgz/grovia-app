@@ -13,7 +13,7 @@ export interface HeaderProps {
   onOpenSettings?: () => void;
   onOpenNotifications?: () => void;
   unreadNotificationsCount?: number;
-  user?: AuthUser;
+  user: AuthUser;
   onLogout?: () => void | Promise<void>;
   defaultProfileOpen?: boolean;
 }

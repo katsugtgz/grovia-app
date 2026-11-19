@@ -36,8 +36,11 @@ export function InviteModal({
   const [team, setTeam] = useState('Engineering');
   const [city, setCity] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const [errors, setErrors] = useState<InviteFieldErrors>({});
+  const dialogGenRef = useRef(0);
+  const isSubmittingRef = useRef(false);
 
   const resetForm = () => {
     setName('');
@@ -46,6 +49,14 @@ export function InviteModal({
     setTeam('Engineering');
     setCity('');
     setErrors({});
+    setFormError(null);
+  };
+
+  const handleRequestClose = () => {
+    if (isSubmittingRef.current) return;
+    dialogGenRef.current += 1;
+    resetForm();
+    onClose();
   };
 
   useEffect(() => {
@@ -55,7 +66,8 @@ export function InviteModal({
     let focusTimer: ReturnType<typeof setTimeout> | undefined;
 
     const handleDialogClick = (e: MouseEvent) => {
-      if (e.target === dialog) {
+      if (e.target === dialog && !isSubmittingRef.current) {
+        dialogGenRef.current += 1;
         resetForm();
         onClose();
       }
@@ -63,6 +75,7 @@ export function InviteModal({
     dialog.addEventListener('click', handleDialogClick);
 
     if (isOpen) {
+      dialogGenRef.current += 1;
       if (!dialog.open) {
         dialog.showModal();
         focusTimer = setTimeout(() => nameInputRef.current?.focus(), 50);
@@ -157,6 +170,9 @@ export function InviteModal({
       return;
     }
 
+    const submitGen = dialogGenRef.current;
+    setFormError(null);
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     try {
       const result = await submitInvitePersonRequest({
@@ -175,17 +191,28 @@ export function InviteModal({
           return;
         }
 
-        setErrors({ email: result.error });
-        shakeInput(emailInputRef.current);
-        emailInputRef.current?.focus();
+        if (submitGen !== dialogGenRef.current) {
+          return;
+        }
+
+        if (result.duplicate || /email/i.test(result.error)) {
+          setErrors({ email: result.error });
+          shakeInput(emailInputRef.current);
+          emailInputRef.current?.focus();
+        } else {
+          setFormError(result.error);
+        }
         return;
       }
 
       onInvite(result.person);
       triggerToast(`Invite sent to ${result.person.email || cleanEmail}`);
-      resetForm();
-      onClose();
+      if (submitGen === dialogGenRef.current) {
+        resetForm();
+        onClose();
+      }
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -198,8 +225,7 @@ export function InviteModal({
       ref={dialogRef}
       onCancel={(e) => {
         e.preventDefault();
-        resetForm();
-        onClose();
+        handleRequestClose();
       }}
     >
       <form
@@ -216,11 +242,18 @@ export function InviteModal({
             type="button"
             data-close
             aria-label="Close invite dialog"
-            onClick={onClose}
+            disabled={isSubmitting}
+            onClick={handleRequestClose}
           >
             <Icon name="x" className="ico" aria-hidden="true" />
           </button>
         </header>
+
+        {formError ? (
+          <div className="auth-alert" role="alert" aria-live="assertive">
+            {formError}
+          </div>
+        ) : null}
 
         <InviteFormFields
           name={name}
@@ -246,7 +279,7 @@ export function InviteModal({
           city={city}
           setCity={setCity}
           errors={errors}
-          onClose={onClose}
+          onClose={handleRequestClose}
           isSubmitting={isSubmitting}
         />
       </form>

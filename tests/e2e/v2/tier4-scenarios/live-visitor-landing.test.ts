@@ -1,5 +1,10 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { startLiveServer, type LiveServerHandle } from '../../harness/live-http';
+import { SEED_PEOPLE } from '@/lib/seed-people';
+import {
+  isSameServerOrigin,
+  startLiveServer,
+  type LiveServerHandle,
+} from '../../harness/live-http';
 import { createRandomEmail, fixtures } from '../../harness/fixtures';
 
 interface HealthResponse {
@@ -27,37 +32,19 @@ interface ErrorResponse {
   error: string;
 }
 
-const SENSITIVE_NAMES = [
-  'Demo Person 01',
-  'Demo Person 02',
-  'Demo Person 03',
-  'Demo Person 04',
-  'Demo Person 05',
-  'Demo Person 06',
-  'Demo Person 07',
-  'Demo Person 08',
-  'Demo Person 09',
-  'Demo Person 10',
-] as const;
+const SENSITIVE_NAMES: readonly string[] = SEED_PEOPLE.map((person) => person.name);
 
-const SENSITIVE_EMAILS = [
-  'person01@example.invalid',
-  'person02@example.invalid',
-  'person03@example.invalid',
-  'person04@example.invalid',
-  'person05@example.invalid',
-  'person06@example.invalid',
-  'person07@example.invalid',
-  'person08@example.invalid',
-  'person09@example.invalid',
-  'person10@example.invalid',
+const SENSITIVE_EMAILS: readonly string[] = [
+  ...SEED_PEOPLE.map((person) => person.email).filter(
+    (email): email is string => typeof email === 'string' && email.length > 0
+  ),
   'alex@innovate.io',
   'elena@quantum.tech',
   'marcus@hypergrowth.co',
   'sarah@vertex.io',
   'liam@finscale.org',
   'chloe@nexus.co',
-] as const;
+];
 
 const PAYROLL_LEAK_MARKERS = [
   '$4,850',
@@ -175,7 +162,7 @@ describe('Tier 4 — Live HTTP Scenario: Public Visitor Landing & PII Audit (T4.
     expect(wsRes.status).toBe(307);
     expect(wsRes.location).toBeTruthy();
     const loc = new URL(wsRes.location ?? '', live.baseUrl);
-    expect(['127.0.0.1', 'localhost']).toContain(loc.hostname);
+    expect(isSameServerOrigin(loc, live.baseUrl)).toBe(true);
     expect(loc.pathname).toBe('/login');
     expect(loc.searchParams.get('next')).toBe('/workspace');
     assertNoSensitivePii(wsRes.text);

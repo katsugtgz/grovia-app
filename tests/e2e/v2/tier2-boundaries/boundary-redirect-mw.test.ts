@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { startLiveServer, type LiveServerHandle } from '../../harness/live-http';
+import {
+  isSameServerOrigin,
+  startLiveServer,
+  type LiveServerHandle,
+} from '../../harness/live-http';
 
 interface ErrorBody {
   success: boolean;
@@ -22,7 +26,7 @@ function assertRedirectDestination(
 ): void {
   expect(typeof location).toBe('string');
   const loc = new URL(location ?? '', getServer().baseUrl);
-  expect(['127.0.0.1', 'localhost']).toContain(loc.hostname);
+  expect(isSameServerOrigin(loc, getServer().baseUrl)).toBe(true);
   expect(loc.pathname).toBe(expectedPathname);
   if (expectedSearch) {
     for (const [key, value] of Object.entries(expectedSearch)) {

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import type { PeopleListResponse, PersonInviteResponse } from '@/lib/types';
 import { createRandomEmail, fixtures } from '../../harness/fixtures';
 import { startLiveServer, type LiveServerHandle } from '../../harness/live-http';
 
@@ -50,27 +51,6 @@ interface InquiryPatchBody {
   ticketId: string;
   status: string;
   priority: string;
-}
-
-interface PersonRecord {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  team: string;
-  city: string;
-  status: string;
-}
-
-interface PeopleGetBody {
-  success: boolean;
-  count: number;
-  people: PersonRecord[];
-}
-
-interface PeoplePostBody {
-  success: boolean;
-  person: PersonRecord;
 }
 
 let server: LiveServerHandle | undefined;
@@ -227,12 +207,13 @@ describe('Tier 1 — F4: Protected vs Public APIs & People/Invites', () => {
     const client = getServer().createClient();
     expect((await client.login()).status).toBe(200);
 
-    const res = await client.get<PeopleGetBody>('/api/people');
+    const res = await client.get<PeopleListResponse>('/api/people');
     expect(res.status).toBe(200);
     expect(res.data.success).toBe(true);
     expect(Array.isArray(res.data.people)).toBe(true);
-    expect(res.data.people.length).toBeGreaterThanOrEqual(10);
-    expect(res.data.count).toBe(res.data.people.length);
+    const people = res.data.people ?? [];
+    expect(people.length).toBeGreaterThanOrEqual(10);
+    expect(res.data.count).toBe(people.length);
   });
 
   test('T1.v2.4.8: Authenticated POST /api/people creates teammate with status Invited', async () => {
@@ -240,7 +221,7 @@ describe('Tier 1 — F4: Protected vs Public APIs & People/Invites', () => {
     expect((await client.login()).status).toBe(200);
 
     const inviteEmail = createRandomEmail('invite_t1');
-    const res = await client.post<PeoplePostBody>('/api/people', {
+    const res = await client.post<PersonInviteResponse>('/api/people', {
       name: 'Nadia Vance',
       email: inviteEmail,
       role: 'Staff Security Engineer',
@@ -250,12 +231,12 @@ describe('Tier 1 — F4: Protected vs Public APIs & People/Invites', () => {
 
     expect(res.status).toBe(201);
     expect(res.data.success).toBe(true);
-    expect(res.data.person.name).toBe('Nadia Vance');
-    expect(res.data.person.email).toBe(inviteEmail.toLowerCase());
-    expect(res.data.person.role).toBe('Staff Security Engineer');
-    expect(res.data.person.team).toBe('Engineering');
-    expect(res.data.person.city).toBe('Berlin');
-    expect(res.data.person.status).toBe('Invited');
+    expect(res.data.person?.name).toBe('Nadia Vance');
+    expect(res.data.person?.email).toBe(inviteEmail.toLowerCase());
+    expect(res.data.person?.role).toBe('Staff Security Engineer');
+    expect(res.data.person?.team).toBe('Engineering');
+    expect(res.data.person?.city).toBe('Berlin');
+    expect(res.data.person?.status).toBe('Invited');
   });
 
   test('T1.v2.4.9: Newly invited teammate persists across subsequent GET /api/people requests', async () => {
@@ -263,7 +244,7 @@ describe('Tier 1 — F4: Protected vs Public APIs & People/Invites', () => {
     expect((await client.login()).status).toBe(200);
 
     const inviteEmail = createRandomEmail('persist_invite_t1');
-    const createRes = await client.post<PeoplePostBody>('/api/people', {
+    const createRes = await client.post<PersonInviteResponse>('/api/people', {
       name: 'Tariq Solis',
       email: inviteEmail,
       role: 'Operations Lead',
@@ -275,10 +256,12 @@ describe('Tier 1 — F4: Protected vs Public APIs & People/Invites', () => {
     const freshClient = getServer().createClient();
     expect((await freshClient.login()).status).toBe(200);
 
-    const listRes = await freshClient.get<PeopleGetBody>('/api/people');
+    const listRes = await freshClient.get<PeopleListResponse>('/api/people');
     expect(listRes.status).toBe(200);
 
-    const found = listRes.data.people.find((person) => person.email === inviteEmail.toLowerCase());
+    const found = (listRes.data.people ?? []).find(
+      (person) => person.email === inviteEmail.toLowerCase()
+    );
     expect(found).toBeDefined();
     expect(found?.name).toBe('Tariq Solis');
     expect(found?.role).toBe('Operations Lead');

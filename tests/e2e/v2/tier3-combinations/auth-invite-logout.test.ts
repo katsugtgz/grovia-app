@@ -1,5 +1,9 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { startLiveServer, type LiveServerHandle } from '../../harness/live-http';
+import {
+  isSameServerOrigin,
+  startLiveServer,
+  type LiveServerHandle,
+} from '../../harness/live-http';
 import { createRandomEmail } from '../../harness/fixtures';
 
 interface PersonRecord {
@@ -127,7 +131,7 @@ describe('Tier 3 — Combinations: Auth, People Invites & Logout (T3.v2.2)', () 
     expect(postLogoutWorkspace.status).toBe(307);
     expect(postLogoutWorkspace.location).toBeTruthy();
     const loc = new URL(postLogoutWorkspace.location ?? '', live.baseUrl);
-    expect(['127.0.0.1', 'localhost']).toContain(loc.hostname);
+    expect(isSameServerOrigin(loc, live.baseUrl)).toBe(true);
     expect(loc.pathname).toBe('/login');
     expect(loc.searchParams.get('next')).toBe('/workspace');
   });

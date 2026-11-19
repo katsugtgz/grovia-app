@@ -1,10 +1,19 @@
 import { NextResponse } from 'next/server';
 import { methodNotAllowed } from '@/lib/api-helpers';
-import { clearSessionCookie } from '@/lib/auth';
+import {
+  SESSION_COOKIE_NAME,
+  clearSessionCookie,
+  revokeSessionToken,
+} from '@/lib/auth';
+import { parseCookieValue } from '@/lib/auth-edge';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request): Promise<Response> {
+  const token = parseCookieValue(request.headers.get('cookie'), SESSION_COOKIE_NAME);
+  if (token) {
+    revokeSessionToken(token);
+  }
   const response = NextResponse.json(
     { success: true },
     {

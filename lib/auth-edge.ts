@@ -22,6 +22,55 @@ const textDecoder = new TextDecoder('utf-8', { fatal: true });
 let cachedSecret: string | null = null;
 let cachedKeyPromise: Promise<CryptoKey> | null = null;
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __grovia_revoked_tokens__: Map<string, number> | undefined;
+}
+
+function getRevokedTokensMap(): Map<string, number> {
+  if (!globalThis.__grovia_revoked_tokens__) {
+    globalThis.__grovia_revoked_tokens__ = new Map<string, number>();
+  }
+  return globalThis.__grovia_revoked_tokens__;
+}
+
+function pruneRevokedTokens(nowSec: number): void {
+  const store = getRevokedTokensMap();
+  if (store.size < 64) return;
+  for (const [tok, exp] of store.entries()) {
+    if (exp <= nowSec) {
+      store.delete(tok);
+    }
+  }
+}
+
+export function revokeSessionToken(token: string | null | undefined): void {
+  if (!token || typeof token !== 'string') return;
+  const nowSec = Math.floor(Date.now() / 1000);
+  pruneRevokedTokens(nowSec);
+  getRevokedTokensMap().set(token, nowSec + SESSION_MAX_AGE_SECONDS);
+}
+
+export function unrevokeSessionToken(token: string | null | undefined): void {
+  if (!token || typeof token !== 'string') return;
+  getRevokedTokensMap().delete(token);
+}
+
+export function clearRevokedSessionTokens(): void {
+  getRevokedTokensMap().clear();
+}
+
+function isSessionTokenRevoked(token: string, nowSec: number): boolean {
+  const store = getRevokedTokensMap();
+  const exp = store.get(token);
+  if (exp === undefined) return false;
+  if (exp <= nowSec) {
+    store.delete(token);
+    return false;
+  }
+  return true;
+}
+
 function resolveAuthSecret(): string {
   if (typeof process !== 'undefined' && process.env) {
     const authSecret = process.env.AUTH_SECRET;
@@ -31,6 +80,9 @@ function resolveAuthSecret(): string {
     const sessionSecret = process.env.SESSION_SECRET;
     if (sessionSecret && sessionSecret.trim().length > 0) {
       return sessionSecret;
+    }
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('AUTH_SECRET or SESSION_SECRET must be configured in production');
     }
   }
   return DEV_FALLBACK_SECRET;
@@ -108,7 +160,9 @@ export async function signSessionToken(
     toArrayBufferBytes(textEncoder.encode(payloadB64))
   );
   const sigB64 = toBase64Url(new Uint8Array(signature));
-  return `${payloadB64}.${sigB64}`;
+  const signedToken = `${payloadB64}.${sigB64}`;
+  unrevokeSessionToken(signedToken);
+  return signedToken;
 }
 
 export async function verifySessionToken(
@@ -161,6 +215,7 @@ export async function verifySessionToken(
 
     const now = Math.floor(Date.now() / 1000);
     if (exp <= now) return null;
+    if (isSessionTokenRevoked(token, now)) return null;
 
     return { id, email, name, role, iat, exp };
   } catch {

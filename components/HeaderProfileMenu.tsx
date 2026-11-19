@@ -17,15 +17,25 @@ export function HeaderProfileMenu({
   defaultProfileOpen = false,
 }: HeaderProfileMenuProps) {
   const profileWrapRef = useRef<HTMLDivElement>(null);
+  const triggerBtnRef = useRef<HTMLButtonElement>(null);
+  const signOutBtnRef = useRef<HTMLButtonElement>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(defaultProfileOpen);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isProfileOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
         setIsProfileOpen(false);
+        triggerBtnRef.current?.focus();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (profileWrapRef.current?.contains(document.activeElement)) {
+          e.preventDefault();
+          signOutBtnRef.current?.focus();
+        }
       }
     };
 
@@ -46,21 +56,45 @@ export function HeaderProfileMenu({
     };
   }, [isProfileOpen]);
 
+  const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    const nextFocused = e.relatedTarget as Node | null;
+    if (
+      isProfileOpen &&
+      nextFocused &&
+      profileWrapRef.current &&
+      !profileWrapRef.current.contains(nextFocused)
+    ) {
+      setIsProfileOpen(false);
+    }
+  };
+
   const handleSignOut = async () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
+    setLogoutError(null);
+    let succeeded = false;
     try {
       if (onLogout) {
         await onLogout();
+        succeeded = true;
       } else {
-        await submitLogoutRequest();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+        const ok = await submitLogoutRequest();
+        if (ok) {
+          succeeded = true;
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
+        } else {
+          setLogoutError('Unable to sign out. Please try again.');
         }
       }
+    } catch {
+      setLogoutError('Unable to sign out. Please try again.');
     } finally {
       setIsLoggingOut(false);
-      setIsProfileOpen(false);
+      if (succeeded) {
+        setIsProfileOpen(false);
+      }
     }
   };
 
@@ -68,15 +102,19 @@ export function HeaderProfileMenu({
   const displayEmail = user?.email || 'admin@grovia.io';
 
   return (
-    <div className="profile-menu-wrap" ref={profileWrapRef}>
+    <div className="profile-menu-wrap" ref={profileWrapRef} onBlur={handleBlur}>
       <button
+        ref={triggerBtnRef}
         className="round-btn magnetic"
         type="button"
         id="profile-menu-btn"
         aria-label="Your profile"
         aria-haspopup="menu"
         aria-expanded={isProfileOpen}
-        onClick={() => setIsProfileOpen((prev) => !prev)}
+        onClick={() => {
+          setLogoutError(null);
+          setIsProfileOpen((prev) => !prev);
+        }}
       >
         <Icon name="user" className="ico" aria-hidden="true" />
       </button>
@@ -96,7 +134,13 @@ export function HeaderProfileMenu({
             {displayEmail}
           </span>
         </div>
+        {logoutError ? (
+          <p className="field__error" role="alert">
+            {logoutError}
+          </p>
+        ) : null}
         <button
+          ref={signOutBtnRef}
           className="profile-menu__logout"
           type="button"
           id="sign-out-btn"

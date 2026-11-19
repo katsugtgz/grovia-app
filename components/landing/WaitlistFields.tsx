@@ -40,8 +40,10 @@ export function WaitlistFields({
       ) : null}
 
       <div className="field-row">
-        <label className="field" htmlFor="waitlist-name">
-          <span className="field__label">Full name</span>
+        <div className="field">
+          <label className="field__label" htmlFor="waitlist-name">
+            Full name
+          </label>
           <input
             id="waitlist-name"
             ref={nameRef}
@@ -51,6 +53,7 @@ export function WaitlistFields({
             autoComplete="name"
             maxLength={1000}
             required
+            disabled={isSubmitting}
             placeholder="Jordan Taylor"
             value={values.name}
             onChange={(e) => onFieldChange('name', e.target.value)}
@@ -60,10 +63,12 @@ export function WaitlistFields({
           <span className="field__error" id="waitlist-name-error">
             {fieldErrors.name ?? ''}
           </span>
-        </label>
+        </div>
 
-        <label className="field" htmlFor="waitlist-email">
-          <span className="field__label">Work email</span>
+        <div className="field">
+          <label className="field__label" htmlFor="waitlist-email">
+            Work email
+          </label>
           <input
             id="waitlist-email"
             ref={emailRef}
@@ -73,6 +78,7 @@ export function WaitlistFields({
             autoComplete="email"
             maxLength={255}
             required
+            disabled={isSubmitting}
             placeholder="jordan@company.com"
             value={values.email}
             onChange={(e) => onFieldChange('email', e.target.value)}
@@ -82,14 +88,14 @@ export function WaitlistFields({
           <span className="field__error" id="waitlist-email-error">
             {fieldErrors.email ?? ''}
           </span>
-        </label>
+        </div>
       </div>
 
       <div className="field-row">
-        <label className="field" htmlFor="waitlist-company">
-          <span className="field__label">
+        <div className="field">
+          <label className="field__label" htmlFor="waitlist-company">
             Company <i>(optional)</i>
-          </span>
+          </label>
           <input
             id="waitlist-company"
             ref={companyRef}
@@ -98,6 +104,7 @@ export function WaitlistFields({
             type="text"
             autoComplete="organization"
             maxLength={255}
+            disabled={isSubmitting}
             placeholder="Acme Labs"
             value={values.company}
             onChange={(e) => onFieldChange('company', e.target.value)}
@@ -107,14 +114,17 @@ export function WaitlistFields({
           <span className="field__error" id="waitlist-company-error">
             {fieldErrors.company ?? ''}
           </span>
-        </label>
+        </div>
 
-        <label className="field" htmlFor="waitlist-team-size">
-          <span className="field__label">Team size</span>
+        <div className="field">
+          <label className="field__label" htmlFor="waitlist-team-size">
+            Team size
+          </label>
           <select
             id="waitlist-team-size"
             className="field__input"
             name="teamSize"
+            disabled={isSubmitting}
             value={values.teamSize}
             onChange={(e) => onFieldChange('teamSize', e.target.value)}
           >
@@ -124,19 +134,20 @@ export function WaitlistFields({
               </option>
             ))}
           </select>
-        </label>
+        </div>
       </div>
 
-      <label className="field" htmlFor="waitlist-use-case">
-        <span className="field__label">
+      <div className="field">
+        <label className="field__label" htmlFor="waitlist-use-case">
           Primary workflow goal <i>(optional)</i>
-        </span>
+        </label>
         <textarea
           id="waitlist-use-case"
           ref={useCaseRef}
           className="field__input landing__textarea"
           name="useCase"
           maxLength={1000}
+          disabled={isSubmitting}
           placeholder="Onboarding new engineers, tracking weekly hours, streamlining payroll..."
           value={values.useCase}
           onChange={(e) => onFieldChange('useCase', e.target.value)}
@@ -146,7 +157,7 @@ export function WaitlistFields({
         <span className="field__error" id="waitlist-usecase-error">
           {fieldErrors.useCase ?? ''}
         </span>
-      </label>
+      </div>
 
       <div>
         <button className="dark-btn" type="submit" disabled={isSubmitting}>

@@ -127,6 +127,8 @@ export const LoginRequestSchema = z.object({
 
 export type LoginInput = z.infer<typeof LoginRequestSchema>;
 
+export const PEOPLE_TEAMS = ['Design', 'Engineering', 'Product', 'Operations'] as const;
+
 export const InvitePersonRequestSchema = z.object({
   name: z
     .string({ required_error: 'name is required' })
@@ -144,11 +146,11 @@ export const InvitePersonRequestSchema = z.object({
     .trim()
     .min(1, 'Role is required')
     .max(200, 'Role must not exceed 200 characters'),
-  team: z
-    .string({ required_error: 'team is required' })
-    .trim()
-    .min(1, 'Team is required')
-    .max(100, 'Team must not exceed 100 characters'),
+  team: z.enum(PEOPLE_TEAMS, {
+    errorMap: () => ({
+      message: 'Team must be Design, Engineering, Product, or Operations',
+    }),
+  }),
   city: z
     .string()
     .trim()

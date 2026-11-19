@@ -88,10 +88,12 @@ export function LoginForm({ nextPath, onSuccess }: LoginFormProps) {
 
     setFieldErrors({});
     setIsSubmitting(true);
+    let redirected = false;
 
     try {
       const result = await submitLoginRequest(email, password);
       if (result.ok) {
+        redirected = true;
         const target = resolveSafeNext(nextPath);
         if (onSuccess) {
           onSuccess(target);
@@ -109,7 +111,9 @@ export function LoginForm({ nextPath, onSuccess }: LoginFormProps) {
         emailInputRef.current?.focus();
       }
     } finally {
-      setIsSubmitting(false);
+      if (!redirected) {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -148,8 +152,10 @@ export function LoginForm({ nextPath, onSuccess }: LoginFormProps) {
           ) : null}
 
           <form className="auth-form" noValidate onSubmit={handleSubmit}>
-            <label className="field" htmlFor="login-email">
-              <span className="field__label">Work email</span>
+            <div className="field">
+              <label className="field__label" htmlFor="login-email">
+                Work email
+              </label>
               <input
                 id="login-email"
                 ref={emailInputRef}
@@ -173,10 +179,12 @@ export function LoginForm({ nextPath, onSuccess }: LoginFormProps) {
               <span className="field__error" id="login-email-error">
                 {fieldErrors.email ?? ''}
               </span>
-            </label>
+            </div>
 
-            <label className="field" htmlFor="login-password">
-              <span className="field__label">Password</span>
+            <div className="field">
+              <label className="field__label" htmlFor="login-password">
+                Password
+              </label>
               <input
                 id="login-password"
                 ref={passwordInputRef}
@@ -200,7 +208,7 @@ export function LoginForm({ nextPath, onSuccess }: LoginFormProps) {
               <span className="field__error" id="login-password-error">
                 {fieldErrors.password ?? ''}
               </span>
-            </label>
+            </div>
 
             <button className="dark-btn auth-submit" type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Signing in...' : 'Sign in'}

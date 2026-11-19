@@ -136,7 +136,8 @@ export type WaitlistSubmitResult =
       error: string;
     };
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_PATTERN =
+  /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
 export function validateWaitlistInput(values: WaitlistFormValues): WaitlistFieldErrors {
   const errors: WaitlistFieldErrors = {};

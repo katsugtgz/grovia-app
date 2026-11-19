@@ -15,21 +15,21 @@ export interface NotificationTrayProps {
 
 const NOTIFICATION_ITEMS = [
   {
-    personIndex: 1,
+    personId: '1',
     fallbackId: 'notif-1',
     fallbackName: 'Team member',
     action: 'accepted the offer',
     time: '2 min ago',
   },
   {
-    personIndex: 2,
+    personId: '2',
     fallbackId: 'notif-2',
     fallbackName: 'Team member',
     action: 'booked Friday off',
     time: '1 h ago',
   },
   {
-    personIndex: 3,
+    personId: '3',
     fallbackId: 'notif-3',
     fallbackName: 'Team member',
     action: 'finished access setup',
@@ -140,8 +140,8 @@ export function NotificationTray({
       </header>
 
       <ul className="tray__list">
-        {NOTIFICATION_ITEMS.map(({ personIndex, fallbackId, fallbackName, action, time }) => {
-          const person = people[personIndex];
+        {NOTIFICATION_ITEMS.map(({ personId, fallbackId, fallbackName, action, time }) => {
+          const person = people.find((p) => p.id === personId);
           const itemKey = person?.id ?? fallbackId;
           const av = person?.av ?? '#cfe0c8';
           const name = person?.name ?? fallbackName;

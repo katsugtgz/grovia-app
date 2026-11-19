@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { startLiveServer, type LiveServerHandle } from '../../harness/live-http';
+import {
+  isSameServerOrigin,
+  startLiveServer,
+  type LiveServerHandle,
+} from '../../harness/live-http';
 
 const SENSITIVE_PII_MARKERS = [
   ...Array.from({ length: 10 }, (_, idx) => `Demo Person ${String(idx + 1).padStart(2, '0')}`),
@@ -22,7 +26,7 @@ function getServer(): LiveServerHandle {
 function assertLocalRedirect(location: string | null, expectedPathname: string, expectedNext?: string): void {
   expect(typeof location).toBe('string');
   const loc = new URL(location ?? '', getServer().baseUrl);
-  expect(['127.0.0.1', 'localhost']).toContain(loc.hostname);
+  expect(isSameServerOrigin(loc, getServer().baseUrl)).toBe(true);
   expect(loc.pathname).toBe(expectedPathname);
   if (expectedNext !== undefined) {
     expect(loc.searchParams.get('next')).toBe(expectedNext);
@@ -65,6 +69,9 @@ describe('Tier 1 — F3: /workspace Route & Edge Middleware Guard', () => {
       const res = await client.get<string>('/workspace');
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')?.toLowerCase()).toContain('text/html');
+      expect(res.text).toContain('id="app"');
+      expect(res.text).toContain('id="view-overview"');
+      expect(res.text).toContain('aria-label="Grovia workspace"');
       expect(res.text).toContain('Overview');
       expect(res.text).toContain('People');
       expect(res.text).toContain('Payroll');

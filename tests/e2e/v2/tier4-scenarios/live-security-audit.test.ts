@@ -1,5 +1,9 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { startLiveServer, type LiveServerHandle } from '../../harness/live-http';
+import {
+  isSameServerOrigin,
+  startLiveServer,
+  type LiveServerHandle,
+} from '../../harness/live-http';
 
 interface AuthResponse {
   success: boolean;
@@ -105,7 +109,7 @@ describe('Tier 4 — Live HTTP Scenario: Security & Edge Middleware Audit (T4.v2
       expect(wsRes.status).toBe(307);
       expect(wsRes.location).toBeTruthy();
       const loc = new URL(wsRes.location ?? '', live.baseUrl);
-      expect(['127.0.0.1', 'localhost']).toContain(loc.hostname);
+      expect(isSameServerOrigin(loc, live.baseUrl)).toBe(true);
       expect(loc.pathname).toBe('/login');
 
       for (const apiPath of protectedApis) {
@@ -144,7 +148,7 @@ describe('Tier 4 — Live HTTP Scenario: Security & Edge Middleware Audit (T4.v2
       expect(authedLogin.location).toBeTruthy();
 
       const loc = new URL(authedLogin.location ?? '', live.baseUrl);
-      expect(['127.0.0.1', 'localhost']).toContain(loc.hostname);
+      expect(isSameServerOrigin(loc, live.baseUrl)).toBe(true);
       expect(loc.hostname).not.toBe('evil.com');
       expect(loc.pathname).toBe('/workspace');
     }
@@ -152,7 +156,7 @@ describe('Tier 4 — Live HTTP Scenario: Security & Edge Middleware Audit (T4.v2
     const safeLogin = await admin.get('/login?next=%2Fworkspace');
     expect(safeLogin.status).toBe(307);
     const safeLoc = new URL(safeLogin.location ?? '', live.baseUrl);
-    expect(['127.0.0.1', 'localhost']).toContain(safeLoc.hostname);
+    expect(isSameServerOrigin(safeLoc, live.baseUrl)).toBe(true);
     expect(safeLoc.pathname).toBe('/workspace');
   });
 

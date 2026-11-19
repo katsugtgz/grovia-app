@@ -147,6 +147,7 @@ export function InviteFormFields({
           className="chip-btn"
           type="button"
           data-close
+          disabled={isSubmitting}
           onClick={onClose}
         >
           Cancel

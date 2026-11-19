@@ -30,6 +30,7 @@ export function ProgressCard() {
   const cardRef = useRef<HTMLElement>(null);
   const weekRef = useRef<HTMLUListElement>(null);
   const tipRef = useRef<HTMLLIElement>(null);
+  const tipTextRef = useRef<HTMLSpanElement>(null);
   const [activeDayIdx, setActiveDayIdx] = useState(6); // Tuesday (today) is index 6
 
   const todayIndex = DAYS.findIndex((d) => d.today);
@@ -48,7 +49,12 @@ export function ProgressCard() {
       const bar = targetDay.querySelector<HTMLElement>('.day__bar');
       if (!track || !bar) return;
 
-      tip.textContent = formatDuration(DAYS[index].h);
+      const formatted = formatDuration(DAYS[index].h);
+      if (tipTextRef.current) {
+        tipTextRef.current.textContent = formatted;
+      } else {
+        tip.textContent = formatted;
+      }
       const left =
         track.offsetLeft + bar.offsetLeft + bar.offsetWidth / 2 - tip.offsetWidth / 2;
       const top = Math.max(
@@ -167,11 +173,13 @@ export function ProgressCard() {
         <li
           className="week__tip"
           id="week-tip"
+          role="none"
           style={{ listStyle: 'none' }}
-          aria-live="polite"
           ref={tipRef}
         >
-          5h 42m
+          <span aria-live="polite" ref={tipTextRef}>
+            5h 42m
+          </span>
         </li>
       </ul>
     </article>

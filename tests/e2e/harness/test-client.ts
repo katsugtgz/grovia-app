@@ -1,7 +1,12 @@
 import { Database } from 'bun:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
+import { resetLoginAttemptTracker } from '@/lib/login-rate-limit';
+import { clearRevokedSessionTokens } from '@/lib/auth-edge';
 import { initSchema } from '@/lib/db';
+
+const DEFAULT_TEST_DB_PATH = path.join(os.tmpdir(), `grovia-test-suite-${process.pid}.db`);
 
 export class RouteNotFoundError extends Error {
   public routePath: string;
@@ -38,12 +43,16 @@ export interface RequestOptions {
   skipAuth?: boolean;
 }
 
+export interface TestClientOptions {
+  directOnly?: boolean;
+}
+
 export class TestClient {
   private baseUrl: string | null;
   private cookies: Map<string, string> = new Map();
 
-  constructor(baseUrl?: string) {
-    this.baseUrl = baseUrl || process.env.E2E_BASE_URL || null;
+  constructor(baseUrl?: string, options?: TestClientOptions) {
+    this.baseUrl = options?.directOnly ? null : baseUrl || process.env.E2E_BASE_URL || null;
   }
 
   clearAuth(): void {
@@ -381,38 +390,62 @@ export class TestClient {
 
 export const testClient = new TestClient();
 
-export function createTestClient(baseUrl?: string): TestClient {
-  return new TestClient(baseUrl);
+export function createTestClient(baseUrl?: string, options?: TestClientOptions): TestClient {
+  return new TestClient(baseUrl, options);
 }
 
 /**
  * DB helper for test isolation
  */
 export function resetDatabase(dbPath?: string): void {
+  resetLoginAttemptTracker();
+  clearRevokedSessionTokens();
+
   let db: Database | null = null;
   try {
-    const target =
+    const configuredTarget =
       dbPath ||
       process.env.DB_PATH ||
       process.env.DATABASE_PATH ||
-      process.env.DATABASE_URL ||
-      'grovia.db';
+      process.env.DATABASE_URL;
+    const target = configuredTarget || DEFAULT_TEST_DB_PATH;
+    if (!configuredTarget) {
+      process.env.DB_PATH = target;
+    }
+
+    const resolvedBaseName = path.basename(path.resolve(target)).toLowerCase();
+    if (resolvedBaseName === 'grovia.db' && process.env.ALLOW_TEST_RESET_MAIN_DB !== '1') {
+      throw new Error(
+        `Refusing to reset primary database "${target}". Set DB_PATH to an isolated test database path or set ALLOW_TEST_RESET_MAIN_DB=1 explicitly.`
+      );
+    }
+
     db = new Database(target);
-    try {
+    const existingTables = db
+      .query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('waitlist', 'inquiries', 'users', 'people')"
+      )
+      .all();
+    const tableSet = new Set(existingTables.map((row) => row.name));
+
+    if (tableSet.has('waitlist')) {
       db.run('DELETE FROM waitlist;');
-    } catch {}
-    try {
+    }
+    if (tableSet.has('inquiries')) {
       db.run('DELETE FROM inquiries;');
-    } catch {}
-    try {
+    }
+    if (tableSet.has('users')) {
       db.run("DELETE FROM users WHERE LOWER(email) != 'admin@grovia.io';");
-    } catch {}
-    try {
+    }
+    if (tableSet.has('people')) {
       db.run("DELETE FROM people WHERE id NOT IN ('0','1','2','3','4','5','6','7','8','9');");
-    } catch {}
+    }
     initSchema(db);
-  } catch {
-    // Database tables might not be created yet
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!message.includes('no such table')) {
+      throw err;
+    }
   } finally {
     try {
       db?.close();

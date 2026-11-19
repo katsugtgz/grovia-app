@@ -76,7 +76,12 @@ describe('Tier 1 — F1: Public Landing Page (/) & PII Exclusion', () => {
 
       expect(res.status).toBe(200);
       expect(res.text.toLowerCase()).toContain('grovia');
-      expect(res.text).toMatch(/pricing|starter|growth|enterprise|\$\d+/i);
+      expect(res.text).toContain('id="pricing"');
+      expect(res.text).toContain('Starter');
+      expect(res.text).toContain('Growth');
+      expect(res.text).toContain('Enterprise');
+      expect(res.text).toContain('$0');
+      expect(res.text).toContain('$12');
       expect(res.text).toMatch(/waitlist/i);
       expect(res.text).toMatch(/type=["']email["']|name=["']email["']|placeholder=["'][^"']*email/i);
       expect(res.text).toContain('/login');

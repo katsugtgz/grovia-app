@@ -25,6 +25,7 @@ const BUILD_WATCH_TARGETS = [
   'middleware.ts',
   'next.config.ts',
   'package.json',
+  'bun.lock',
 ] as const;
 
 let buildPromise: Promise<void> | null = null;
@@ -285,6 +286,26 @@ function isBodyInitLike(
   );
 }
 
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
+
+/**
+ * Checks whether a redirect URL shares the configured server's origin.
+ * Allows Next.js loopback canonicalization (127.0.0.1 <-> localhost) only when
+ * both target and expected baseUrl are loopback hosts on the exact same protocol & port.
+ */
+export function isSameServerOrigin(target: URL, baseUrl: string): boolean {
+  const expected = new URL(baseUrl);
+  if (target.origin === expected.origin) {
+    return true;
+  }
+  return (
+    target.protocol === expected.protocol &&
+    target.port === expected.port &&
+    LOOPBACK_HOSTS.has(target.hostname) &&
+    LOOPBACK_HOSTS.has(expected.hostname)
+  );
+}
+
 export class LiveHttpClient {
   readonly baseUrl: string;
   readonly jar: CookieJar;
@@ -524,8 +545,15 @@ export function resetLiveDatabase(dbPath: string): void {
     if (tableSet.has('users')) {
       db.run("DELETE FROM users WHERE LOWER(email) != 'admin@grovia.io';");
     }
-  } catch {
-    // Tables may not exist yet before first request initializes schema
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    const isExpectedSchemaOrOpenIssue =
+      message.includes('no such table') ||
+      message.includes('unable to open database') ||
+      message.includes('SQLITE_CANTOPEN');
+    if (!isExpectedSchemaOrOpenIssue) {
+      throw err;
+    }
   } finally {
     if (db) {
       try {
@@ -705,6 +733,12 @@ function buildChildEnv(
     env.DATABASE_URL = dbPath;
     env.DATABASE_PATH = dbPath;
   }
+  if (!env.AUTH_SECRET && !env.SESSION_SECRET) {
+    env.AUTH_SECRET = 'grovia-e2e-live-test-secret-2026';
+  }
+  if (!env.ALLOW_DEMO_ADMIN) {
+    env.ALLOW_DEMO_ADMIN = '1';
+  }
   return env;
 }
 
@@ -799,11 +833,27 @@ async function waitForHealth(
       throw new Error('Health poll aborted');
     }
 
+    const attemptController = new AbortController();
+    const remainingMs = Math.max(50, deadline - Date.now());
+    const attemptTimer = setTimeout(() => {
+      attemptController.abort(
+        new Error(`Health check attempt timed out after ${remainingMs}ms`)
+      );
+    }, remainingMs);
+    const onParentAbort = () => {
+      attemptController.abort(signal.reason);
+    };
+    if (signal.aborted) {
+      attemptController.abort(signal.reason);
+    } else {
+      signal.addEventListener('abort', onParentAbort, { once: true });
+    }
+
     try {
       const res = await fetch(healthUrl, {
         method: 'GET',
         redirect: 'manual',
-        signal,
+        signal: attemptController.signal,
       });
 
       if (res.ok) {
@@ -820,6 +870,9 @@ async function waitForHealth(
         throw new Error('Health poll aborted');
       }
       lastError = err instanceof Error ? err.message : String(err);
+    } finally {
+      clearTimeout(attemptTimer);
+      signal.removeEventListener('abort', onParentAbort);
     }
 
     await new Promise<void>((resolve) => {

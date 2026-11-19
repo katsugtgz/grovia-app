@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { LandingHeader } from '@/components/landing/LandingHeader';
 import { LandingPage } from '@/components/landing/LandingPage';
 import {
+  LANDING_FEATURES,
   submitWaitlistRequest,
   validateWaitlistInput,
 } from '@/components/landing/landing-data';
@@ -114,6 +115,11 @@ describe('Unit — M2 Landing Page, Login Page & PII Isolation', () => {
       expect(css).toContain('--dim: #4e4c47;');
       expect(css).toContain('--faint: #56544d;');
 
+      const landingCssStart = css.indexOf('.landing {');
+      expect(landingCssStart).toBeGreaterThan(-1);
+      const landingCssBlock = css.slice(landingCssStart);
+      expect(landingCssBlock).not.toMatch(/opacity\s*:\s*0(?:\s*;|\s*!important|\s*\})/);
+
       const landingPageSource = fs.readFileSync(
         path.resolve(process.cwd(), 'components/landing/LandingPage.tsx'),
         'utf8'
@@ -156,6 +162,10 @@ describe('Unit — M2 Landing Page, Login Page & PII Isolation', () => {
         for (const match of content.matchAll(/<Icon\s+name="([^"]+)"/g)) {
           expect(validIconNames.has(match[1])).toBe(true);
         }
+      }
+
+      for (const feature of LANDING_FEATURES) {
+        expect(validIconNames.has(feature.icon)).toBe(true);
       }
     });
   });

@@ -35,11 +35,12 @@ export function WorkspaceShell({ initialPeople, user }: WorkspaceShellProps) {
   const [isDemoOpen, setIsDemoOpen] = useState(false);
 
   const appRef = useRef<HTMLElement>(null);
+  const requestedViewRef = useRef<ViewType>('overview');
 
-  // Trigger 1.6s cascading initial entrance
+  // Initialize workspace overview rail state without blocking initial SSR paint
   useEntranceTimeline(appRef);
 
-  // Load settings from localStorage
+  // Load settings from localStorage and listen for demo modal events
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -52,15 +53,18 @@ export function WorkspaceShell({ initialPeople, user }: WorkspaceShellProps) {
     } catch {
       // Ignore localStorage errors
     }
+
+    const handleOpenDemo = () => setIsDemoOpen(true);
+    window.addEventListener('grovia:open-demo', handleOpenDemo);
+    return () => window.removeEventListener('grovia:open-demo', handleOpenDemo);
   }, []);
 
   // Synchronize view state with window URL hash
   useEffect(() => {
     const handleHash = () => {
-      const hash = window.location.hash;
-      if (hash) {
-        setCurrentView(normalizeView(hash));
-      }
+      const nextView = normalizeView(window.location.hash);
+      requestedViewRef.current = nextView;
+      setCurrentView(nextView);
     };
 
     handleHash();
@@ -71,7 +75,8 @@ export function WorkspaceShell({ initialPeople, user }: WorkspaceShellProps) {
   // View change handler with coordinated transitions and history sync
   const handleViewChange = useCallback(
     (newView: ViewType) => {
-      if (newView === currentView) return;
+      if (newView === requestedViewRef.current) return;
+      requestedViewRef.current = newView;
 
       if (typeof window !== 'undefined' && window.scrollY > 0) {
         window.scrollTo({
@@ -196,6 +201,7 @@ export function WorkspaceShell({ initialPeople, user }: WorkspaceShellProps) {
       <OverviewView
         active={currentView === 'overview'}
         greetingName={greetingName}
+        workdayHours={workdayHours}
         people={people}
       />
 

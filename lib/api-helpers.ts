@@ -19,15 +19,40 @@ export function methodNotAllowed(allowed: string[]): NextResponse {
   );
 }
 
+const DEFAULT_MAX_BODY_BYTES = 64 * 1024;
+
 /**
- * Safely parse JSON body from incoming Request.
- * Returns structured 400 response for empty or malformed JSON payloads.
+ * Safely parse JSON body from incoming Request with an enforced byte limit.
+ * Returns structured 400/413 response for empty, oversized, or malformed JSON payloads.
  */
 export async function parseJsonBody<T = unknown>(
-  request: Request
+  request: Request,
+  maxBytes: number = DEFAULT_MAX_BODY_BYTES
 ): Promise<{ data?: T; error?: NextResponse }> {
   try {
+    const contentLengthHeader = request.headers.get('content-length');
+    if (contentLengthHeader) {
+      const declaredLength = Number.parseInt(contentLengthHeader, 10);
+      if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+        return {
+          error: NextResponse.json(
+            { success: false, error: 'Request payload too large' },
+            { status: 413, headers: { 'Content-Type': 'application/json' } }
+          ),
+        };
+      }
+    }
+
     const text = await request.text();
+    if (Buffer.byteLength(text, 'utf8') > maxBytes) {
+      return {
+        error: NextResponse.json(
+          { success: false, error: 'Request payload too large' },
+          { status: 413, headers: { 'Content-Type': 'application/json' } }
+        ),
+      };
+    }
+
     if (!text || text.trim() === '') {
       return {
         error: NextResponse.json(

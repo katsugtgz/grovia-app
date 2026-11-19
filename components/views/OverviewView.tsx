@@ -16,6 +16,7 @@ import type { Person } from '@/lib/types';
 export interface OverviewViewProps {
   active: boolean;
   greetingName?: string;
+  workdayHours?: number;
   people?: Person[];
 }
 
@@ -24,18 +25,21 @@ const EMPTY_PEOPLE: Person[] = [];
 export function OverviewView({
   active,
   greetingName = 'Person 05',
+  workdayHours = 8,
   people = EMPTY_PEOPLE,
 }: OverviewViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const hasMountedRef = useRef(false);
+  const prevStateRef = useRef({ active, greetingName });
 
   const greetingText = `Good morning, ${greetingName}`;
 
   // Character split animation on active/greeting change after initial SSR paint
   useEffect(() => {
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
+    const prev = prevStateRef.current;
+    const changed = prev.active !== active || prev.greetingName !== greetingName;
+    prevStateRef.current = { active, greetingName };
+    if (!changed) {
       return;
     }
     if (!active || isReducedMotion() || !titleRef.current) return;
@@ -170,7 +174,7 @@ export function OverviewView({
       <div className="bento">
         <ProfileCard />
         <ProgressCard />
-        <TimeTrackerCard />
+        <TimeTrackerCard workdayHours={workdayHours} />
         <OnboardingCard />
         <AccordionCard />
         <CalendarCard people={people} />

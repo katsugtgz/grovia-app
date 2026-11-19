@@ -20,16 +20,18 @@ import * as peopleRoute from '@/app/api/people/route';
 
 describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
   const tempDbPath = path.resolve(process.cwd(), 'test-unit-auth-api.db');
-  const client = createTestClient();
+  const client = createTestClient(undefined, { directOnly: true });
 
   let prevDbPath: string | undefined;
   let prevDatabasePath: string | undefined;
   let prevDatabaseUrl: string | undefined;
+  let prevAllowDemoAdmin: string | undefined;
 
   beforeAll(() => {
     prevDbPath = process.env.DB_PATH;
     prevDatabasePath = process.env.DATABASE_PATH;
     prevDatabaseUrl = process.env.DATABASE_URL;
+    prevAllowDemoAdmin = process.env.ALLOW_DEMO_ADMIN;
 
     for (const file of [tempDbPath, `${tempDbPath}-wal`, `${tempDbPath}-shm`]) {
       if (fs.existsSync(file)) {
@@ -38,6 +40,7 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
     }
 
     process.env.DB_PATH = tempDbPath;
+    process.env.ALLOW_DEMO_ADMIN = '1';
     delete process.env.DATABASE_PATH;
     delete process.env.DATABASE_URL;
 
@@ -67,28 +70,30 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
     else delete process.env.DATABASE_PATH;
     if (prevDatabaseUrl !== undefined) process.env.DATABASE_URL = prevDatabaseUrl;
     else delete process.env.DATABASE_URL;
+    if (prevAllowDemoAdmin !== undefined) process.env.ALLOW_DEMO_ADMIN = prevAllowDemoAdmin;
+    else delete process.env.ALLOW_DEMO_ADMIN;
   });
 
   describe('Password Hashing (lib/password.ts)', () => {
-    test('produces unique salted scrypt hashes and verifies matching password', () => {
+    test('produces unique salted scrypt hashes with explicit cost params and verifies matching password', async () => {
       const hashA = hashPassword('grovia-demo-2026');
       const hashB = hashPassword('grovia-demo-2026');
 
       expect(hashA).not.toBe(hashB);
-      expect(hashA.startsWith('scrypt:')).toBe(true);
-      expect(verifyPassword('grovia-demo-2026', hashA)).toBe(true);
-      expect(verifyPassword('grovia-demo-2026', hashB)).toBe(true);
-      expect(verifyPassword('wrong-password', hashA)).toBe(false);
+      expect(hashA.startsWith('scrypt:16384:8:1:')).toBe(true);
+      expect(await verifyPassword('grovia-demo-2026', hashA)).toBe(true);
+      expect(await verifyPassword('grovia-demo-2026', hashB)).toBe(true);
+      expect(await verifyPassword('wrong-password', hashA)).toBe(false);
     });
 
-    test('handles malformed, empty, or wrong-length hashes safely without throwing', () => {
+    test('handles malformed, empty, or wrong-length hashes safely without throwing', async () => {
       expect(() => hashPassword('')).toThrow();
-      expect(verifyPassword('', 'scrypt:abc:def')).toBe(false);
-      expect(verifyPassword('password', '')).toBe(false);
-      expect(verifyPassword('password', 'invalid-format')).toBe(false);
-      expect(verifyPassword('password', 'bcrypt:abc:def')).toBe(false);
-      expect(verifyPassword('password', 'scrypt:nothex!:abcd')).toBe(false);
-      expect(verifyPassword('password', 'scrypt:abcd:1234')).toBe(false);
+      expect(await verifyPassword('', 'scrypt:abc:def')).toBe(false);
+      expect(await verifyPassword('password', '')).toBe(false);
+      expect(await verifyPassword('password', 'invalid-format')).toBe(false);
+      expect(await verifyPassword('password', 'bcrypt:abc:def')).toBe(false);
+      expect(await verifyPassword('password', 'scrypt:nothex!:abcd')).toBe(false);
+      expect(await verifyPassword('password', 'scrypt:abcd:1234')).toBe(false);
     });
   });
 
@@ -197,13 +202,17 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       expect(await verifySessionToken(nonCanonicalPayloadToken)).toBeNull();
     });
 
-    test('works with zero env secrets set (CI fallback) and ignores whitespace-only AUTH_SECRET', async () => {
+    test('fails closed in production without env secrets, uses fallback in non-production, and ignores whitespace-only AUTH_SECRET', async () => {
+      const mutableEnv = process.env as Record<string, string | undefined>;
       const prevAuth = process.env.AUTH_SECRET;
       const prevSess = process.env.SESSION_SECRET;
+      const prevNodeEnv = mutableEnv.NODE_ENV;
       delete process.env.AUTH_SECRET;
       delete process.env.SESSION_SECRET;
 
       try {
+        // Non-production (test) falls back to dev secret for CI/local runs
+        mutableEnv.NODE_ENV = 'test';
         const fallbackToken = await signSessionToken({
           id: 42,
           email: 'ci@grovia.io',
@@ -213,6 +222,21 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
         const decoded = await verifySessionToken(fallbackToken);
         expect(decoded?.id).toBe(42);
         expect(decoded?.email).toBe('ci@grovia.io');
+
+        // Production without AUTH_SECRET or SESSION_SECRET must fail closed
+        mutableEnv.NODE_ENV = 'production';
+        await expect(
+          signSessionToken({
+            id: 42,
+            email: 'ci@grovia.io',
+            name: 'CI Runner',
+            role: 'admin',
+          })
+        ).rejects.toThrow('AUTH_SECRET or SESSION_SECRET must be configured in production');
+        expect(await verifySessionToken(fallbackToken)).toBeNull();
+
+        // Restore non-production for whitespace-only AUTH_SECRET fallback checks
+        mutableEnv.NODE_ENV = 'test';
 
         // Whitespace-only AUTH_SECRET must fall back to SESSION_SECRET, not DEV_FALLBACK_SECRET
         process.env.AUTH_SECRET = '   ';
@@ -240,6 +264,8 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
         process.env.AUTH_SECRET = 'exact-spaces-secret';
         expect(await verifySessionToken(exactToken)).toBeNull();
       } finally {
+        if (prevNodeEnv !== undefined) mutableEnv.NODE_ENV = prevNodeEnv;
+        else delete mutableEnv.NODE_ENV;
         if (prevAuth !== undefined) process.env.AUTH_SECRET = prevAuth;
         else delete process.env.AUTH_SECRET;
         if (prevSess !== undefined) process.env.SESSION_SECRET = prevSess;
@@ -293,7 +319,9 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
     test('omits Secure on http://localhost even when NODE_ENV=production, sets Secure on HTTPS', async () => {
       const mutableEnv = process.env as Record<string, string | undefined>;
       const prevNodeEnv = mutableEnv.NODE_ENV;
+      const prevAuthSecret = mutableEnv.AUTH_SECRET;
       mutableEnv.NODE_ENV = 'production';
+      mutableEnv.AUTH_SECRET = 'unit-test-production-cookie-secret';
 
       try {
         // 1. Local HTTP request -> NO Secure attribute
@@ -364,6 +392,8 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       } finally {
         if (prevNodeEnv !== undefined) mutableEnv.NODE_ENV = prevNodeEnv;
         else delete mutableEnv.NODE_ENV;
+        if (prevAuthSecret !== undefined) mutableEnv.AUTH_SECRET = prevAuthSecret;
+        else delete mutableEnv.AUTH_SECRET;
       }
     });
   });

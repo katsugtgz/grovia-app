@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { isReducedMotion } from '@/lib/motion';
 import { Icon } from '@/components/ui/Icon';
 
 export type LandingSectionId = 'features' | 'pricing' | 'waitlist';
@@ -70,23 +69,8 @@ export function LandingHeader() {
     };
   }, []);
 
-  const handleNavClick = (
-    e: React.MouseEvent<HTMLAnchorElement>,
-    sectionId: LandingSectionId,
-    href: string
-  ) => {
-    e.preventDefault();
+  const handleNavClick = (sectionId: LandingSectionId) => {
     setActiveSection(sectionId);
-    if (typeof window !== 'undefined') {
-      window.history.pushState(null, '', href);
-      const target = document.getElementById(sectionId);
-      if (target) {
-        target.scrollIntoView({
-          behavior: isReducedMotion() ? 'auto' : 'smooth',
-          block: 'start',
-        });
-      }
-    }
   };
 
   return (
@@ -105,7 +89,7 @@ export function LandingHeader() {
               className={`landing__nav-link${isActive ? ' is-active' : ''}`}
               href={section.href}
               aria-current={isActive ? 'location' : undefined}
-              onClick={(e) => handleNavClick(e, section.id, section.href)}
+              onClick={() => handleNavClick(section.id)}
             >
               {section.label}
             </a>

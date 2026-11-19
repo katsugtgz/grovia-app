@@ -1,5 +1,9 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { startLiveServer, type LiveServerHandle } from '../../harness/live-http';
+import {
+  isSameServerOrigin,
+  startLiveServer,
+  type LiveServerHandle,
+} from '../../harness/live-http';
 import { createRandomEmail } from '../../harness/fixtures';
 
 interface AuthResponse {
@@ -95,7 +99,7 @@ describe('Tier 4 — Live HTTP Scenario: Admin Workspace & CookieJar Lifecycle (
     expect(unauthWs.status).toBe(307);
     expect(unauthWs.location).toBeTruthy();
     const redirectLoc = new URL(unauthWs.location ?? '', live.baseUrl);
-    expect(['127.0.0.1', 'localhost']).toContain(redirectLoc.hostname);
+    expect(isSameServerOrigin(redirectLoc, live.baseUrl)).toBe(true);
     expect(redirectLoc.pathname).toBe('/login');
     expect(redirectLoc.searchParams.get('next')).toBe('/workspace');
 
@@ -222,7 +226,7 @@ describe('Tier 4 — Live HTTP Scenario: Admin Workspace & CookieJar Lifecycle (
     const wsAfterLogout = await admin.get('/workspace');
     expect(wsAfterLogout.status).toBe(307);
     const loc = new URL(wsAfterLogout.location ?? '', live.baseUrl);
-    expect(['127.0.0.1', 'localhost']).toContain(loc.hostname);
+    expect(isSameServerOrigin(loc, live.baseUrl)).toBe(true);
     expect(loc.pathname).toBe('/login');
     expect(loc.searchParams.get('next')).toBe('/workspace');
 

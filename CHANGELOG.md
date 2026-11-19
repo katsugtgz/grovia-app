@@ -4,6 +4,14 @@ All notable changes to **Grovia** are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **LCP Shell Optimization**: Replaced the initial 1.6s cascading opacity entrance delay with an immediate zero-opacity-delay shell render (`useEntranceTimeline`) while preserving interactive GSAP view transitions, Flip filter morphing, and micro-interactions.
+- **Public Landing, Auth & Workspace Split**: Mounted public landing page at `/`, sign-in at `/login`, protected Bento workspace at `/workspace`, and Edge `middleware.ts` with HMAC-SHA256 `grovia_session` auth, fail-closed production secret enforcement, async `scrypt` password verification, login rate limiting, and server-side logout token revocation.
+- **Expanded Verification Suite**: Verified `381 / 381` passing tests across `48` suites (unit, contract, stress, and live HTTP E2E tiers 1–4) plus `100 / 100` on `react-doctor`.
+
 ## [0.1.0] - 2026-11-17
 
 ### Added

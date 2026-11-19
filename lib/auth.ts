@@ -5,8 +5,10 @@ import {
   SESSION_MAX_AGE_SECONDS,
   type SessionPayload,
   type SessionUser,
+  clearRevokedSessionTokens,
   isHttpsRequest,
   parseCookieValue,
+  revokeSessionToken,
   signSessionToken,
   verifySessionToken,
 } from '@/lib/auth-edge';
@@ -69,6 +71,12 @@ export function clearSessionCookie(
   response: NextResponse,
   request?: Request
 ): NextResponse {
+  if (request) {
+    const existingToken = parseCookieValue(request.headers.get('cookie'), SESSION_COOKIE_NAME);
+    if (existingToken) {
+      revokeSessionToken(existingToken);
+    }
+  }
   const secure = request ? isHttpsRequest(request) : false;
   response.cookies.set(SESSION_COOKIE_NAME, '', {
     httpOnly: true,
@@ -83,6 +91,8 @@ export function clearSessionCookie(
 export {
   SESSION_COOKIE_NAME,
   SESSION_MAX_AGE_SECONDS,
+  clearRevokedSessionTokens,
+  revokeSessionToken,
   signSessionToken,
   signSessionToken as createSessionToken,
   verifySessionToken,

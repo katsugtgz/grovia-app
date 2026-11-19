@@ -23,7 +23,16 @@ export function LandingPage({ header }: LandingPageProps) {
     if (!root) return;
 
     const handleAnchorClick = (e: MouseEvent) => {
-      if (e.defaultPrevented) return;
+      if (
+        e.defaultPrevented ||
+        e.button !== 0 ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.shiftKey ||
+        e.altKey
+      ) {
+        return;
+      }
       const targetEl = e.target as HTMLElement | null;
       const anchor = targetEl?.closest?.('a[href^="#"]') as HTMLAnchorElement | null;
       if (!anchor || !root.contains(anchor)) return;

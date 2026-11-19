@@ -203,6 +203,7 @@ export function WorkspaceShell({ initialPeople, user }: WorkspaceShellProps) {
         greetingName={greetingName}
         workdayHours={workdayHours}
         people={people}
+        onOpenDemo={() => setIsDemoOpen(true)}
       />
 
       <PeopleView

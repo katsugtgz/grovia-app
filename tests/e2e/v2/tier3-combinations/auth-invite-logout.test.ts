@@ -1,32 +1,11 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import type { PeopleListResponse, PersonInviteResponse } from '@/lib/types';
 import {
   isSameServerOrigin,
   startLiveServer,
   type LiveServerHandle,
 } from '../../harness/live-http';
 import { createRandomEmail } from '../../harness/fixtures';
-
-interface PersonRecord {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  team: string;
-  city: string;
-  status: string;
-}
-
-interface PeopleListResponse {
-  success: boolean;
-  people: PersonRecord[];
-  count: number;
-}
-
-interface InviteResponse {
-  success: boolean;
-  person?: PersonRecord;
-  error?: string;
-}
 
 interface AuthResponse {
   success: boolean;
@@ -78,11 +57,11 @@ describe('Tier 3 — Combinations: Auth, People Invites & Logout (T3.v2.2)', () 
 
     const beforePeople = await admin.get<PeopleListResponse>('/api/people');
     expect(beforePeople.status).toBe(200);
-    expect(beforePeople.data.count).toBeGreaterThanOrEqual(10);
-    const beforeCount = beforePeople.data.count;
+    expect(beforePeople.data.count ?? 0).toBeGreaterThanOrEqual(10);
+    const beforeCount = beforePeople.data.count ?? 0;
 
     const inviteEmail = createRandomEmail('t3_invite_full');
-    const inviteRes = await admin.post<InviteResponse>('/api/people', {
+    const inviteRes = await admin.post<PersonInviteResponse>('/api/people', {
       name: 'Maya Lin',
       email: inviteEmail,
       role: 'Staff Engineer',
@@ -98,7 +77,7 @@ describe('Tier 3 — Combinations: Auth, People Invites & Logout (T3.v2.2)', () 
     expect(afterPeople.status).toBe(200);
     expect(afterPeople.data.count).toBe(beforeCount + 1);
     expect(
-      afterPeople.data.people.some(
+      (afterPeople.data.people ?? []).some(
         (person) => person.email === inviteEmail && person.status === 'Invited'
       )
     ).toBe(true);
@@ -142,7 +121,7 @@ describe('Tier 3 — Combinations: Auth, People Invites & Logout (T3.v2.2)', () 
     expect((await admin.login<AuthResponse>()).status).toBe(200);
 
     const inviteEmail = createRandomEmail('t3_invite_dup');
-    const firstInvite = await admin.post<InviteResponse>('/api/people', {
+    const firstInvite = await admin.post<PersonInviteResponse>('/api/people', {
       name: 'Jordan Patel',
       email: inviteEmail,
       role: 'Product Manager',
@@ -155,7 +134,7 @@ describe('Tier 3 — Combinations: Auth, People Invites & Logout (T3.v2.2)', () 
     expect(listAfterFirst.status).toBe(200);
     const countAfterFirst = listAfterFirst.data.count;
 
-    const duplicateInvite = await admin.post<InviteResponse>('/api/people', {
+    const duplicateInvite = await admin.post<PersonInviteResponse>('/api/people', {
       name: 'Jordan Duplicate',
       email: inviteEmail.toUpperCase(),
       role: 'Product Manager',
@@ -170,8 +149,8 @@ describe('Tier 3 — Combinations: Auth, People Invites & Logout (T3.v2.2)', () 
     expect(listAfterDuplicate.status).toBe(200);
     expect(listAfterDuplicate.data.count).toBe(countAfterFirst);
 
-    const matches = listAfterDuplicate.data.people.filter(
-      (person) => person.email.toLowerCase() === inviteEmail.toLowerCase()
+    const matches = (listAfterDuplicate.data.people ?? []).filter(
+      (person) => (person.email ?? '').toLowerCase() === inviteEmail.toLowerCase()
     );
     expect(matches.length).toBe(1);
   });
@@ -182,7 +161,7 @@ describe('Tier 3 — Combinations: Auth, People Invites & Logout (T3.v2.2)', () 
     expect((await firstSession.login<AuthResponse>()).status).toBe(200);
 
     const inviteEmail = createRandomEmail('t3_invite_persist');
-    const inviteRes = await firstSession.post<InviteResponse>('/api/people', {
+    const inviteRes = await firstSession.post<PersonInviteResponse>('/api/people', {
       name: 'Elena Kim',
       email: inviteEmail,
       role: 'Data Engineer',
@@ -198,7 +177,7 @@ describe('Tier 3 — Combinations: Auth, People Invites & Logout (T3.v2.2)', () 
     const peopleRes = await secondSession.get<PeopleListResponse>('/api/people');
     expect(peopleRes.status).toBe(200);
     expect(
-      peopleRes.data.people.some(
+      (peopleRes.data.people ?? []).some(
         (person) =>
           person.email === inviteEmail &&
           person.name === 'Elena Kim' &&

@@ -18,6 +18,7 @@ export interface OverviewViewProps {
   greetingName?: string;
   workdayHours?: number;
   people?: Person[];
+  onOpenDemo?: () => void;
 }
 
 const EMPTY_PEOPLE: Person[] = [];
@@ -27,6 +28,7 @@ export function OverviewView({
   greetingName = 'Person 05',
   workdayHours = 8,
   people = EMPTY_PEOPLE,
+  onOpenDemo,
 }: OverviewViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -181,7 +183,7 @@ export function OverviewView({
       </div>
 
       <div style={{ marginTop: 'var(--gap)' }}>
-        <GrowthRoiCard />
+        <GrowthRoiCard onOpenDemo={onOpenDemo} />
       </div>
     </div>
   );

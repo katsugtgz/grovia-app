@@ -128,6 +128,9 @@ describe('Unit — M3 Workspace Migration, Public Landing Mount, PII Decoupling 
       expect(html).toContain('id="view-people"');
       expect(html).toContain('id="view-payroll"');
       expect(html).toContain('id="invite-dialog"');
+      expect(html).toContain('id="demo-dialog"');
+      expect(html).toContain('id="book-demo-btn"');
+      expect(html).toContain('Book a demo');
       expect(html).toContain('id="tray"');
       expect(html).toContain('Demo Person 01');
       expect(html).toContain('Alex Rivera');

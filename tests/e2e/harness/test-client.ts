@@ -4,9 +4,36 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { resetLoginAttemptTracker } from '@/lib/login-rate-limit';
 import { clearRevokedSessionTokens } from '@/lib/auth-edge';
-import { initSchema } from '@/lib/db';
+import { closeDb, initSchema } from '@/lib/db';
 
 const DEFAULT_TEST_DB_PATH = path.join(os.tmpdir(), `grovia-test-suite-${process.pid}.db`);
+let defaultTestDbCleanupRegistered = false;
+
+export function cleanupDefaultTestDbFiles(): void {
+  const hasAnyFile = ['', '-wal', '-shm'].some((suffix) =>
+    fs.existsSync(`${DEFAULT_TEST_DB_PATH}${suffix}`)
+  );
+  if (!hasAnyFile) return;
+
+  try {
+    closeDb();
+  } catch {}
+  for (const suffix of ['', '-wal', '-shm']) {
+    const file = `${DEFAULT_TEST_DB_PATH}${suffix}`;
+    try {
+      if (fs.existsSync(file)) {
+        fs.unlinkSync(file);
+      }
+    } catch {}
+  }
+}
+
+function registerDefaultTestDbCleanup(): void {
+  if (defaultTestDbCleanupRegistered) return;
+  defaultTestDbCleanupRegistered = true;
+  process.once('beforeExit', cleanupDefaultTestDbFiles);
+  process.once('exit', cleanupDefaultTestDbFiles);
+}
 
 export class RouteNotFoundError extends Error {
   public routePath: string;
@@ -411,6 +438,9 @@ export function resetDatabase(dbPath?: string): void {
     const target = configuredTarget || DEFAULT_TEST_DB_PATH;
     if (!configuredTarget) {
       process.env.DB_PATH = target;
+    }
+    if (path.resolve(target) === path.resolve(DEFAULT_TEST_DB_PATH)) {
+      registerDefaultTestDbCleanup();
     }
 
     const resolvedBaseName = path.basename(path.resolve(target)).toLowerCase();

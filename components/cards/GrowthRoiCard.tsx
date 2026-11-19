@@ -17,7 +17,11 @@ const INITIAL_ROI: RoiResponse = {
   monthlyTrajectory: [],
 };
 
-export function GrowthRoiCard() {
+export interface GrowthRoiCardProps {
+  onOpenDemo?: () => void;
+}
+
+export function GrowthRoiCard({ onOpenDemo }: GrowthRoiCardProps) {
   const cardRef = useRef<HTMLElement>(null);
   const [traffic, setTraffic] = useState<number>(50000);
   const [conversionRate, setConversionRate] = useState<number>(2.5);
@@ -172,16 +176,33 @@ export function GrowthRoiCard() {
           </div>
         </div>
 
-        <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <button
-            className="chip-btn magnetic"
-            type="submit"
-            disabled={isLoading}
-            style={{ fontSize: '12px', padding: '6px 14px' }}
-          >
-            <Icon name="bolt" className="ico" aria-hidden="true" />
-            <span>{isLoading ? 'Computing...' : 'Recalculate'}</span>
-          </button>
+        <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              className="chip-btn magnetic"
+              type="submit"
+              disabled={isLoading}
+              style={{ fontSize: '12px', padding: '6px 14px' }}
+            >
+              <Icon name="bolt" className="ico" aria-hidden="true" />
+              <span>{isLoading ? 'Computing...' : 'Recalculate'}</span>
+            </button>
+            <button
+              id="book-demo-btn"
+              className="chip-btn"
+              type="button"
+              onClick={() => {
+                if (onOpenDemo) {
+                  onOpenDemo();
+                } else if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('grovia:open-demo'));
+                }
+              }}
+              style={{ fontSize: '12px', padding: '6px 14px' }}
+            >
+              <span>Book a demo</span>
+            </button>
+          </div>
 
           {roiData && (
             <div style={{ textAlign: 'right' }}>

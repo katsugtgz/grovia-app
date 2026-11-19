@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import type { PeopleListResponse, PersonInviteResponse } from '@/lib/types';
 import {
   isSameServerOrigin,
   startLiveServer,
@@ -27,27 +28,6 @@ interface SessionResponse {
     role: string;
   };
   error?: string;
-}
-
-interface PersonRecord {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  team: string;
-  city: string;
-  status: string;
-}
-
-interface PeopleListResponse {
-  success: boolean;
-  people: PersonRecord[];
-  count: number;
-}
-
-interface InviteResponse {
-  success: boolean;
-  person?: PersonRecord;
 }
 
 interface WaitlistEntry {
@@ -155,12 +135,12 @@ describe('Tier 4 — Live HTTP Scenario: Admin Workspace & CookieJar Lifecycle (
 
     const initialPeople = await admin.get<PeopleListResponse>('/api/people');
     expect(initialPeople.status).toBe(200);
-    expect(initialPeople.data.count).toBeGreaterThanOrEqual(10);
-    expect(initialPeople.data.people.length).toBe(initialPeople.data.count);
-    const beforePeopleCount = initialPeople.data.count;
+    expect(initialPeople.data.count ?? 0).toBeGreaterThanOrEqual(10);
+    expect((initialPeople.data.people ?? []).length).toBe(initialPeople.data.count ?? 0);
+    const beforePeopleCount = initialPeople.data.count ?? 0;
 
     const inviteEmail = createRandomEmail('t4_maya_lin');
-    const inviteRes = await admin.post<InviteResponse>('/api/people', {
+    const inviteRes = await admin.post<PersonInviteResponse>('/api/people', {
       name: 'Maya Lin',
       email: inviteEmail,
       role: 'Staff Engineer',
@@ -177,7 +157,7 @@ describe('Tier 4 — Live HTTP Scenario: Admin Workspace & CookieJar Lifecycle (
     expect(updatedPeople.status).toBe(200);
     expect(updatedPeople.data.count).toBe(beforePeopleCount + 1);
     expect(
-      updatedPeople.data.people.some(
+      (updatedPeople.data.people ?? []).some(
         (person) => person.email === inviteEmail && person.status === 'Invited'
       )
     ).toBe(true);
@@ -187,7 +167,7 @@ describe('Tier 4 — Live HTTP Scenario: Admin Workspace & CookieJar Lifecycle (
     const freshPeople = await freshAdmin.get<PeopleListResponse>('/api/people');
     expect(freshPeople.status).toBe(200);
     expect(
-      freshPeople.data.people.some(
+      (freshPeople.data.people ?? []).some(
         (person) =>
           person.email === inviteEmail &&
           person.name === 'Maya Lin' &&

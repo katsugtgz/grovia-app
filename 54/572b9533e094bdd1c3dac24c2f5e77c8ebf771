@@ -1,0 +1,30 @@
+bunfig.toml
+  h_cc1f32aec57e6b 1-2
+components/WorkspaceShell.tsx
+  h_cc1f32aec57e6b 206
+components/cards/GrowthRoiCard.tsx
+  h_cc1f32aec57e6b 20-24,179-205
+components/views/OverviewView.tsx
+  h_cc1f32aec57e6b 21,31,186
+tests/e2e/harness/test-cleanup.ts
+  h_cc1f32aec57e6b 1-6
+tests/e2e/harness/test-client.ts
+  h_cc1f32aec57e6b 7,10-36,442-444
+tests/e2e/v2/tier3-combinations/auth-invite-logout.test.ts
+  h_cc1f32aec57e6b 2,60-61,64,80,124,137,152-153,164,180
+tests/e2e/v2/tier4-scenarios/live-admin-workspace.test.ts
+  h_cc1f32aec57e6b 2,138-140,143,160,170
+tests/unit/workspace-ui.test.ts
+  h_cc1f32aec57e6b 131-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "54572b9533e094bdd1c3dac24c2f5e77c8ebf771",
+  "prompts": {},
+  "humans": {
+    "h_cc1f32aec57e6b": {
+      "author": "Muhammad Naufal Mahdi <053792227@ecampus.ut.ac.id>"
+    }
+  }
+}

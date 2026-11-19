@@ -1,3 +1,4 @@
+import { EMAIL_PATTERN } from '@/lib/email-validation';
 import type { IconName, WaitlistResponse } from '@/lib/types';
 
 export interface LandingFeatureItem {
@@ -135,9 +136,6 @@ export type WaitlistSubmitResult =
       duplicate?: boolean;
       error: string;
     };
-
-const EMAIL_PATTERN =
-  /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
 export function validateWaitlistInput(values: WaitlistFormValues): WaitlistFieldErrors {
   const errors: WaitlistFieldErrors = {};

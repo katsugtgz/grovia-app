@@ -125,23 +125,31 @@ describe('Full-App Stress, Concurrency, Race Deduplication & Security Fuzzing Su
 
   describe('1. High-Concurrency Burst Requests Across All Routes & APIs', () => {
     test('Auth burst: concurrent POST /api/auth/login, GET /api/auth/session, and POST /api/auth/logout', async () => {
-      const loginCount = 20;
+      const waveSize = 10;
+      const waves = 2;
       const latencies: number[] = [];
 
-      // Concurrent login burst (mix of valid admin logins and invalid credentials)
-      const loginOutcomes = await Promise.all(
-        Array.from({ length: loginCount }, (_, i) =>
-          timedCall(async () => {
-            const client = createTestClient(undefined, { directOnly: true });
-            const isValid = i % 4 !== 3;
-            const res = await client.login(
-              'admin@grovia.io',
-              isValid ? 'grovia-demo-2026' : `wrong-password-${i}`
-            );
-            return { client, res, isValid };
-          })
-        )
-      );
+      // Two concurrent waves of 10 (each wave within the 10-attempt per-email brute-force guard)
+      const loginOutcomes: Array<{
+        result: { client: TestClient; res: Awaited<ReturnType<TestClient['login']>>; isValid: boolean };
+        durationMs: number;
+      }> = [];
+      for (let w = 0; w < waves; w += 1) {
+        const waveResults = await Promise.all(
+          Array.from({ length: waveSize }, (_, i) =>
+            timedCall(async () => {
+              const client = createTestClient(undefined, { directOnly: true });
+              const isValid = i % 5 !== 4;
+              const res = await client.login(
+                'admin@grovia.io',
+                isValid ? 'grovia-demo-2026' : `wrong-password-${w}-${i}`
+              );
+              return { client, res, isValid };
+            })
+          )
+        );
+        loginOutcomes.push(...waveResults);
+      }
 
       for (const { result, durationMs } of loginOutcomes) {
         latencies.push(durationMs);

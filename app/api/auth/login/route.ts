@@ -3,10 +3,9 @@ import { methodNotAllowed, parseJsonBody } from '@/lib/api-helpers';
 import { setSessionCookie, signSessionToken } from '@/lib/auth';
 import { findUserByEmail } from '@/lib/db';
 import {
-  clearFailedLoginAttempts,
   extractClientIp,
-  isLoginRateLimited,
-  recordFailedLoginAttempt,
+  releaseLoginAttempt,
+  reserveLoginAttempt,
 } from '@/lib/login-rate-limit';
 import { hashPassword, verifyPasswordAsync } from '@/lib/password';
 import type { AuthUser } from '@/lib/types';
@@ -40,7 +39,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const clientIp = extractClientIp(request);
   const now = Date.now();
-  const rateCheck = isLoginRateLimited(clientIp, parsed.data.email, now);
+  const rateCheck = reserveLoginAttempt(clientIp, parsed.data.email, now);
   if (rateCheck.limited) {
     return NextResponse.json(
       {
@@ -64,7 +63,6 @@ export async function POST(request: Request): Promise<Response> {
     const isPasswordValid = await verifyPasswordAsync(parsed.data.password, targetHash);
 
     if (!user || !isPasswordValid) {
-      recordFailedLoginAttempt(clientIp, parsed.data.email, Date.now());
       return NextResponse.json(
         { success: false, error: 'Invalid email or password' },
         {
@@ -77,7 +75,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    clearFailedLoginAttempts(clientIp, parsed.data.email);
+    releaseLoginAttempt(clientIp, parsed.data.email);
 
     const sessionUser: AuthUser = {
       id: user.id,

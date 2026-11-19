@@ -71,12 +71,6 @@ export function clearSessionCookie(
   response: NextResponse,
   request?: Request
 ): NextResponse {
-  if (request) {
-    const existingToken = parseCookieValue(request.headers.get('cookie'), SESSION_COOKIE_NAME);
-    if (existingToken) {
-      revokeSessionToken(existingToken);
-    }
-  }
   const secure = request ? isHttpsRequest(request) : false;
   response.cookies.set(SESSION_COOKIE_NAME, '', {
     httpOnly: true,

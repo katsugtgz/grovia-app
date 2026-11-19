@@ -69,7 +69,20 @@ export function LandingHeader() {
     };
   }, []);
 
-  const handleNavClick = (sectionId: LandingSectionId) => {
+  const handleNavClick = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    sectionId: LandingSectionId
+  ) => {
+    if (
+      e.defaultPrevented ||
+      e.button !== 0 ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.shiftKey ||
+      e.altKey
+    ) {
+      return;
+    }
     setActiveSection(sectionId);
   };
 
@@ -89,7 +102,7 @@ export function LandingHeader() {
               className={`landing__nav-link${isActive ? ' is-active' : ''}`}
               href={section.href}
               aria-current={isActive ? 'location' : undefined}
-              onClick={() => handleNavClick(section.id)}
+              onClick={(e) => handleNavClick(e, section.id)}
             >
               {section.label}
             </a>

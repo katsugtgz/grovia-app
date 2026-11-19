@@ -40,7 +40,8 @@ function parseStoredScryptHash(storedHash: string): ParsedScryptHash | null {
       r > 32 ||
       !Number.isInteger(p) ||
       p < 1 ||
-      p > 16
+      p > 16 ||
+      128 * n * r > MAX_MEM
     ) {
       return null;
     }

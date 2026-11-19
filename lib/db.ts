@@ -87,7 +87,7 @@ function getDummyStoreSnapshotPath(): string | null {
     process.env.DB_PATH ||
     process.env.DATABASE_PATH ||
     process.env.DATABASE_URL ||
-    '';
+    getDatabasePath();
   const trimmed = rawPath.trim();
   if (!trimmed || trimmed === ':memory:') return null;
   const normalized = trimmed.startsWith('file:') ? trimmed.slice(5) : trimmed;
@@ -96,6 +96,11 @@ function getDummyStoreSnapshotPath(): string | null {
     : path.resolve(process.cwd(), `${normalized}.store.json`);
 }
 
+/**
+ * Persists the non-Bun JSON snapshot atomically via temp file + rename.
+ * Note: JSON snapshot fallback assumes a single writer process; multi-process
+ * deployments should run on Bun SQLite (WAL) or an external database.
+ */
 function persistDummyStores(stores: DummyStores): void {
   const snapshotPath = getDummyStoreSnapshotPath();
   if (!snapshotPath) {
@@ -120,6 +125,15 @@ function persistDummyStores(stores: DummyStores): void {
   const tmpPath = `${snapshotPath}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(tmpPath, JSON.stringify(stores), 'utf8');
   fs.renameSync(tmpPath, snapshotPath);
+}
+
+function commitDummyMutation(stores: DummyStores, rollback: () => void): void {
+  try {
+    persistDummyStores(stores);
+  } catch (err) {
+    rollback();
+    throw err;
+  }
 }
 
 function getDummyStores(): DummyStores {
@@ -261,6 +275,7 @@ function getDatabaseConstructor(): typeof Database {
                   if (normalized.includes('OR IGNORE')) return { changes: 0, lastInsertRowid: 0 };
                   throw new Error('UNIQUE constraint failed: waitlist.email');
                 }
+                const prevNextId = stores.nextWaitlistId;
                 const id = stores.nextWaitlistId++;
                 stores.waitlist.push({
                   id,
@@ -272,6 +287,10 @@ function getDatabaseConstructor(): typeof Database {
                   status: params[5] ? String(params[5]) : 'pending',
                   createdAt: now,
                 });
+                commitDummyMutation(stores, () => {
+                  stores.waitlist.pop();
+                  stores.nextWaitlistId = prevNextId;
+                });
                 return { changes: 1, lastInsertRowid: id };
               }
 
@@ -282,6 +301,7 @@ function getDatabaseConstructor(): typeof Database {
                   if (normalized.includes('OR IGNORE')) return { changes: 0, lastInsertRowid: 0 };
                   throw new Error('UNIQUE constraint failed: inquiries.ticket_id');
                 }
+                const prevNextId = stores.nextInquiryId;
                 const id = stores.nextInquiryId++;
                 stores.inquiries.push({
                   id,
@@ -296,6 +316,10 @@ function getDatabaseConstructor(): typeof Database {
                   created_at: now,
                   updated_at: now,
                 });
+                commitDummyMutation(stores, () => {
+                  stores.inquiries.pop();
+                  stores.nextInquiryId = prevNextId;
+                });
                 return { changes: 1, lastInsertRowid: id };
               }
 
@@ -306,6 +330,7 @@ function getDatabaseConstructor(): typeof Database {
                   if (normalized.includes('OR IGNORE')) return { changes: 0, lastInsertRowid: 0 };
                   throw new Error('UNIQUE constraint failed: users.email');
                 }
+                const prevNextId = stores.nextUserId;
                 const id = stores.nextUserId++;
                 stores.users.push({
                   id,
@@ -315,7 +340,24 @@ function getDatabaseConstructor(): typeof Database {
                   password_hash: String(params[3] ?? ''),
                   created_at: now,
                 });
+                commitDummyMutation(stores, () => {
+                  stores.users.pop();
+                  stores.nextUserId = prevNextId;
+                });
                 return { changes: 1, lastInsertRowid: id };
+              }
+
+              if (normalized.startsWith('UPDATE USERS')) {
+                const [newHash, targetEmail] = params;
+                const emailStr = String(targetEmail ?? '').trim().toLowerCase();
+                const row = stores.users.find((u) => u.email.toLowerCase() === emailStr);
+                if (!row) return { changes: 0 };
+                const prevHash = row.password_hash;
+                row.password_hash = String(newHash ?? '');
+                commitDummyMutation(stores, () => {
+                  row.password_hash = prevHash;
+                });
+                return { changes: 1 };
               }
 
               if (normalized.startsWith('INSERT') && normalized.includes('INTO PEOPLE')) {
@@ -346,12 +388,9 @@ function getDatabaseConstructor(): typeof Database {
                   created_at: now,
                 };
                 stores.people.push(newPersonRow);
-                try {
-                  persistDummyStores(stores);
-                } catch (persistErr) {
+                commitDummyMutation(stores, () => {
                   stores.people.pop();
-                  throw persistErr;
-                }
+                });
                 return { changes: 1, lastInsertRowid: stores.people.length };
               }
 
@@ -359,45 +398,63 @@ function getDatabaseConstructor(): typeof Database {
                 const [status, priority, targetId] = params;
                 const row = stores.inquiries.find((r) => r.id === Number(targetId));
                 if (!row) return { changes: 0 };
+                const prevStatus = row.status;
+                const prevPriority = row.priority;
+                const prevUpdatedAt = row.updated_at;
                 row.status = String(status);
                 row.priority = String(priority);
                 row.updated_at = now;
+                commitDummyMutation(stores, () => {
+                  row.status = prevStatus;
+                  row.priority = prevPriority;
+                  row.updated_at = prevUpdatedAt;
+                });
                 return { changes: 1 };
               }
 
               if (normalized.startsWith('DELETE FROM WAITLIST')) {
-                const count = stores.waitlist.length;
+                const prev = [...stores.waitlist];
                 stores.waitlist.length = 0;
-                return { changes: count };
+                commitDummyMutation(stores, () => {
+                  stores.waitlist = prev;
+                });
+                return { changes: prev.length };
               }
 
               if (normalized.startsWith('DELETE FROM INQUIRIES')) {
-                const count = stores.inquiries.length;
+                const prev = [...stores.inquiries];
                 stores.inquiries.length = 0;
-                return { changes: count };
+                commitDummyMutation(stores, () => {
+                  stores.inquiries = prev;
+                });
+                return { changes: prev.length };
               }
 
               if (normalized.startsWith('DELETE FROM USERS')) {
+                const prev = [...stores.users];
                 if (normalized.includes("LOWER(EMAIL) != 'ADMIN@GROVIA.IO'")) {
-                  const before = stores.users.length;
                   stores.users = stores.users.filter((u) => u.email.toLowerCase() === 'admin@grovia.io');
-                  return { changes: before - stores.users.length };
+                } else {
+                  stores.users.length = 0;
                 }
-                const count = stores.users.length;
-                stores.users.length = 0;
-                return { changes: count };
+                commitDummyMutation(stores, () => {
+                  stores.users = prev;
+                });
+                return { changes: prev.length - stores.users.length };
               }
 
               if (normalized.startsWith('DELETE FROM PEOPLE')) {
+                const prev = [...stores.people];
                 if (normalized.includes('ID NOT IN')) {
                   const baselineIds = new Set(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
-                  const before = stores.people.length;
                   stores.people = stores.people.filter((p) => baselineIds.has(p.id));
-                  return { changes: before - stores.people.length };
+                } else {
+                  stores.people.length = 0;
                 }
-                const count = stores.people.length;
-                stores.people.length = 0;
-                return { changes: count };
+                commitDummyMutation(stores, () => {
+                  stores.people = prev;
+                });
+                return { changes: prev.length - stores.people.length };
               }
 
               return { changes: 0 };
@@ -621,11 +678,25 @@ export function initSchema(database: Database): void {
   ensureAuthAndPeopleSeeded(database);
 }
 
+export function getConfiguredAdminEmail(): string {
+  return (process.env.ADMIN_EMAIL || 'admin@grovia.io').trim().toLowerCase();
+}
+
+export function isDemoAdminAllowedInEnv(): boolean {
+  return process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_ADMIN === '1';
+}
+
+export function isProductionDemoAdminBlocked(email: string): boolean {
+  if (process.env.NODE_ENV !== 'production') return false;
+  if (process.env.ALLOW_DEMO_ADMIN === '1') return false;
+  if (process.env.ADMIN_PASSWORD?.trim()) return false;
+  return email.trim().toLowerCase() === getConfiguredAdminEmail();
+}
+
 export function ensureAuthAndPeopleSeeded(database: Database): void {
-  const adminEmail = (process.env.ADMIN_EMAIL || 'admin@grovia.io').trim().toLowerCase();
+  const adminEmail = getConfiguredAdminEmail();
   const configuredAdminPassword = process.env.ADMIN_PASSWORD?.trim();
-  const allowDemoAdmin =
-    process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_ADMIN === '1';
+  const allowDemoAdmin = isDemoAdminAllowedInEnv();
   const adminPassword =
     configuredAdminPassword && configuredAdminPassword.length > 0
       ? configuredAdminPassword
@@ -643,6 +714,13 @@ export function ensureAuthAndPeopleSeeded(database: Database): void {
       database
         .prepare('INSERT OR IGNORE INTO users (email, name, role, password_hash) VALUES (?, ?, ?, ?)')
         .run(adminEmail, 'Alex Rivera', 'admin', adminHash);
+    } else if (configuredAdminPassword && configuredAdminPassword.length > 0) {
+      // Rotate stored admin hash when an explicit ADMIN_PASSWORD is configured so a
+      // previously seeded public demo password cannot survive into production.
+      const rotatedHash = hashPassword(configuredAdminPassword);
+      database
+        .prepare('UPDATE users SET password_hash = ? WHERE LOWER(email) = ?')
+        .run(rotatedHash, adminEmail);
     }
   }
 
@@ -694,12 +772,12 @@ export function initDatabase(dbPath?: string): Database {
   }
 
   const DbConstructor = getDatabaseConstructor();
+  globalThis.__grovia_db_path__ = targetPath;
   const database = new DbConstructor(targetPath, { create: true });
   configurePragmas(database);
   initSchema(database);
 
   globalThis.__grovia_db__ = database;
-  globalThis.__grovia_db_path__ = targetPath;
   return database;
 }
 

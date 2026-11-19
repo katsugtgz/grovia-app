@@ -2,6 +2,17 @@ import { describe, test, expect, beforeAll, beforeEach, afterAll } from 'bun:tes
 import fs from 'node:fs';
 import path from 'node:path';
 import { hashPassword, verifyPassword } from '@/lib/password';
+import { parseJsonBody } from '@/lib/api-helpers';
+import {
+  LOGIN_WINDOW_MS,
+  MAX_FAILED_IP_ATTEMPTS,
+  MAX_FAILED_LOGIN_ATTEMPTS,
+  extractClientIp,
+  getLoginAttemptBucketCount,
+  releaseLoginAttempt,
+  reserveLoginAttempt,
+  resetLoginAttemptTracker,
+} from '@/lib/login-rate-limit';
 import {
   SESSION_COOKIE_NAME,
   getSafeRedirectTarget,
@@ -683,6 +694,140 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
         expect(res.status).toBe(405);
         expect(res.headers.get('allow')).toBe('GET, POST');
       }
+    });
+  });
+
+  describe('Security & Hardening Helpers (parseJsonBody, login-rate-limit, jti & scrypt bounds)', () => {
+    test('parseJsonBody enforces Content-Length, chunked byte limit, default 64KiB cap, and exact-limit payloads', async () => {
+      // Exact limit succeeds
+      const exactBody = JSON.stringify({ k: 'a'.repeat(100) });
+      const exactBytes = Buffer.byteLength(exactBody, 'utf8');
+      const exactRes = await parseJsonBody<{ k: string }>(
+        new Request('http://localhost:3000/api/people', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: exactBody,
+        }),
+        exactBytes
+      );
+      expect(exactRes.error).toBeUndefined();
+      expect(exactRes.data?.k.length).toBe(100);
+
+      // Oversized declared Content-Length -> 413
+      const declaredTooLarge = await parseJsonBody(
+        new Request('http://localhost:3000/api/people', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': String(exactBytes + 1) },
+          body: exactBody,
+        }),
+        exactBytes
+      );
+      expect(declaredTooLarge.error?.status).toBe(413);
+
+      // Oversized body without Content-Length header -> 413
+      const chunkedTooLarge = await parseJsonBody(
+        new Request('http://localhost:3000/api/people', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ k: 'a'.repeat(101) }),
+        }),
+        exactBytes
+      );
+      expect(chunkedTooLarge.error?.status).toBe(413);
+
+      // Default 64 KiB cap rejects >64 KiB body
+      const overDefault = await parseJsonBody(
+        new Request('http://localhost:3000/api/waitlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: 'x'.repeat(65 * 1024) }),
+        })
+      );
+      expect(overDefault.error?.status).toBe(413);
+    });
+
+    test('login rate limiter enforces email/IP thresholds, expiry, release rollback, proxy trust, and lowest-count eviction', () => {
+      resetLoginAttemptTracker();
+      const t0 = 1_700_000_000_000;
+
+      // Proxy IP extraction requires TRUST_PROXY_HEADERS=1 and uses rightmost X-Forwarded-For entry
+      const prevTrust = process.env.TRUST_PROXY_HEADERS;
+      try {
+        delete process.env.TRUST_PROXY_HEADERS;
+        const reqWithXff = new Request('http://localhost:3000/api/auth/login', {
+          headers: { 'x-forwarded-for': '203.0.113.1, 198.51.100.7' },
+        });
+        expect(extractClientIp(reqWithXff)).toBeNull();
+
+        process.env.TRUST_PROXY_HEADERS = '1';
+        expect(extractClientIp(reqWithXff)).toBe('198.51.100.7');
+      } finally {
+        if (prevTrust !== undefined) process.env.TRUST_PROXY_HEADERS = prevTrust;
+        else delete process.env.TRUST_PROXY_HEADERS;
+      }
+
+      // Per-email threshold (10 attempts) -> 11th is limited
+      for (let i = 0; i < MAX_FAILED_LOGIN_ATTEMPTS; i += 1) {
+        expect(reserveLoginAttempt(null, 'victim@grovia.io', t0).limited).toBe(false);
+      }
+      const limitedEmail = reserveLoginAttempt(null, 'victim@grovia.io', t0);
+      expect(limitedEmail.limited).toBe(true);
+      expect(limitedEmail.retryAfterSec).toBeGreaterThan(0);
+
+      // Expiry resets bucket
+      expect(
+        reserveLoginAttempt(null, 'victim@grovia.io', t0 + LOGIN_WINDOW_MS + 1).limited
+      ).toBe(false);
+
+      // Release clears email bucket and rolls back IP reservation
+      resetLoginAttemptTracker();
+      for (let i = 0; i < MAX_FAILED_IP_ATTEMPTS - 1; i += 1) {
+        expect(reserveLoginAttempt('10.0.0.1', `user${i}@grovia.io`, t0).limited).toBe(false);
+      }
+      expect(reserveLoginAttempt('10.0.0.1', 'good@grovia.io', t0).limited).toBe(false);
+      releaseLoginAttempt('10.0.0.1', 'good@grovia.io');
+      // Because IP reservation was rolled back, one more attempt on same IP succeeds
+      expect(reserveLoginAttempt('10.0.0.1', 'another@grovia.io', t0).limited).toBe(false);
+      // Now IP bucket is at 25 -> next attempt is limited
+      expect(reserveLoginAttempt('10.0.0.1', 'overflow@grovia.io', t0).limited).toBe(true);
+
+      // Capacity eviction evicts lowest-count buckets while preserving at-limit buckets
+      resetLoginAttemptTracker();
+      for (let i = 0; i < MAX_FAILED_LOGIN_ATTEMPTS; i += 1) {
+        reserveLoginAttempt(null, 'locked@grovia.io', t0, 5);
+      }
+      for (let i = 0; i < 10; i += 1) {
+        reserveLoginAttempt(null, `noise-${i}@grovia.io`, t0, 5);
+      }
+      expect(getLoginAttemptBucketCount()).toBeLessThanOrEqual(5);
+      expect(reserveLoginAttempt(null, 'locked@grovia.io', t0, 5).limited).toBe(true);
+      resetLoginAttemptTracker();
+    });
+
+    test('same-second logins yield unique jti tokens, logout ignores unverified cookies, and scrypt rejects over-maxmem params', async () => {
+      const user = { id: 1, email: 'admin@grovia.io', name: 'Alex Rivera', role: 'admin' };
+      const tok1 = await signSessionToken(user);
+      const tok2 = await signSessionToken(user);
+      expect(tok1).not.toBe(tok2);
+      const dec1 = await verifySessionToken(tok1);
+      const dec2 = await verifySessionToken(tok2);
+      expect(dec1?.jti).toBeTruthy();
+      expect(dec2?.jti).toBeTruthy();
+      expect(dec1?.jti).not.toBe(dec2?.jti);
+
+      // Unverified cookie sent to logout does not throw or revoke valid tok2
+      const bogusLogout = await logoutRoute.POST(
+        new Request('http://localhost:3000/api/auth/logout', {
+          method: 'POST',
+          headers: { cookie: `${SESSION_COOKIE_NAME}=not-a-valid-token` },
+        })
+      );
+      expect(bogusLogout.status).toBe(200);
+      expect(await verifySessionToken(tok2)).not.toBeNull();
+
+      // scrypt parameter sets where 128 * N * r > 64 MiB (e.g. N=131072, r=8 -> 128 MiB) are rejected
+      const overMaxMemHash = `scrypt:131072:8:1:${'aa'.repeat(16)}:${'bb'.repeat(64)}`;
+      expect(await verifyPassword('grovia-demo-2026', overMaxMemHash)).toBe(false);
     });
   });
 });

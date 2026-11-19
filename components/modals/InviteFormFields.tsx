@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Icon } from '@/components/ui/Icon';
+import { PEOPLE_TEAMS } from '@/lib/validations';
 
 export interface InviteFormFieldsProps {
   name: string;
@@ -119,10 +120,11 @@ export function InviteFormFields({
             value={team}
             onChange={(e) => setTeam(e.target.value)}
           >
-            <option value="Design">Design</option>
-            <option value="Engineering">Engineering</option>
-            <option value="Product">Product</option>
-            <option value="Operations">Operations</option>
+            {PEOPLE_TEAMS.map((teamOption) => (
+              <option key={teamOption} value={teamOption}>
+                {teamOption}
+              </option>
+            ))}
           </select>
         </label>
       </div>

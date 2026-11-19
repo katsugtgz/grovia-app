@@ -53,7 +53,7 @@ export function WaitlistFields({
             autoComplete="name"
             maxLength={1000}
             required
-            disabled={isSubmitting}
+            readOnly={isSubmitting}
             placeholder="Jordan Taylor"
             value={values.name}
             onChange={(e) => onFieldChange('name', e.target.value)}
@@ -78,7 +78,7 @@ export function WaitlistFields({
             autoComplete="email"
             maxLength={255}
             required
-            disabled={isSubmitting}
+            readOnly={isSubmitting}
             placeholder="jordan@company.com"
             value={values.email}
             onChange={(e) => onFieldChange('email', e.target.value)}
@@ -104,7 +104,7 @@ export function WaitlistFields({
             type="text"
             autoComplete="organization"
             maxLength={255}
-            disabled={isSubmitting}
+            readOnly={isSubmitting}
             placeholder="Acme Labs"
             value={values.company}
             onChange={(e) => onFieldChange('company', e.target.value)}
@@ -147,7 +147,7 @@ export function WaitlistFields({
           className="field__input landing__textarea"
           name="useCase"
           maxLength={1000}
-          disabled={isSubmitting}
+          readOnly={isSubmitting}
           placeholder="Onboarding new engineers, tracking weekly hours, streamlining payroll..."
           value={values.useCase}
           onChange={(e) => onFieldChange('useCase', e.target.value)}

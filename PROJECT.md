@@ -52,7 +52,7 @@
 | M3 | UI Views, Bento Grid & Motion | Features 12-23: Overview, People, Payroll, Bento cards, Stopwatch, Modals, GSAP animations | M1, M2 | DONE |
 | M4 | GitHub Repo & CI/CD | Features 24-25: Public repository creation, GitHub Actions CI/CD workflow | M1, M2, M3 | DONE |
 | M5 | E2E Test Pass & react-doctor Gate | Features 26-28: 100% E2E tests pass (Tiers 1-4), Tier 5 adversarial, react-doctor 100 | M1-M4, E2E | DONE |
-| M6 | Landing, Login, Protected Workspace & Live HTTP E2E | Features 29-32: `/`, `/login`, `/workspace`, `middleware.ts`, `grovia_session` auth, 381/381 tests pass across 48 suites, react-doctor 100 | M1-M5 | DONE |
+| M6 | Landing, Login, Protected Workspace & Live HTTP E2E | Features 29-32: `/`, `/login`, `/workspace`, `middleware.ts`, `grovia_session` auth, 384/384 tests pass across 48 suites, react-doctor 100 | M1-M5 | DONE |
 
 ## Interface Contracts
 

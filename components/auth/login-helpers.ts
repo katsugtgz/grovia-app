@@ -3,6 +3,7 @@ import {
   getSafeRedirectTarget,
   type SessionPayload,
 } from '@/lib/auth-edge';
+import { EMAIL_PATTERN } from '@/lib/email-validation';
 import type { AuthLoginResponse, AuthUser } from '@/lib/types';
 
 export const DEMO_ADMIN_EMAIL = 'admin@grovia.io';
@@ -23,8 +24,6 @@ export type LoginSubmitResult =
       status: number;
       error: string;
     };
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function resolveSafeNext(rawNext: string | string[] | undefined): string {
   const candidate = Array.isArray(rawNext) ? rawNext[0] : rawNext;

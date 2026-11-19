@@ -6,6 +6,7 @@ import { Flip } from 'gsap/Flip';
 import { $, isReducedMotion } from '@/lib/motion';
 import { Icon } from '@/components/ui/Icon';
 import type { Person } from '@/lib/types';
+import { PEOPLE_TEAMS } from '@/lib/validations';
 import { triggerToast } from '@/lib/toast';
 import { PeopleTable } from './people/PeopleTable';
 import { PeopleActionTray } from './people/PeopleActionTray';
@@ -21,7 +22,7 @@ export interface PeopleViewProps {
   onOpenInvite: () => void;
 }
 
-const TEAMS = ['all', 'Design', 'Engineering', 'Product', 'Operations'] as const;
+const TEAMS = ['all', ...PEOPLE_TEAMS] as const;
 
 export function PeopleView({ active, people, onOpenInvite }: PeopleViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);

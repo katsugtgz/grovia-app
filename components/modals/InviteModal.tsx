@@ -40,7 +40,13 @@ export function InviteModal({
 
   const [errors, setErrors] = useState<InviteFieldErrors>({});
   const dialogGenRef = useRef(0);
+  const wasOpenRef = useRef(false);
   const isSubmittingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   const resetForm = () => {
     setName('');
@@ -56,7 +62,7 @@ export function InviteModal({
     if (isSubmittingRef.current) return;
     dialogGenRef.current += 1;
     resetForm();
-    onClose();
+    onCloseRef.current();
   };
 
   useEffect(() => {
@@ -69,13 +75,18 @@ export function InviteModal({
       if (e.target === dialog && !isSubmittingRef.current) {
         dialogGenRef.current += 1;
         resetForm();
-        onClose();
+        onCloseRef.current();
       }
     };
     dialog.addEventListener('click', handleDialogClick);
 
+    const transitionedToOpen = isOpen && !wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+
     if (isOpen) {
-      dialogGenRef.current += 1;
+      if (transitionedToOpen) {
+        dialogGenRef.current += 1;
+      }
       if (!dialog.open) {
         dialog.showModal();
         focusTimer = setTimeout(() => nameInputRef.current?.focus(), 50);
@@ -119,7 +130,7 @@ export function InviteModal({
       if (focusTimer) clearTimeout(focusTimer);
       dialog.removeEventListener('click', handleDialogClick);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   const shakeInput = (inputEl: HTMLElement | null) => {
     if (!inputEl || isReducedMotion()) return;

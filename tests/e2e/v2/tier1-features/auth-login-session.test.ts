@@ -100,6 +100,20 @@ describe('Tier 1 — F2: Login Page (/login) & Auth/Session Engine', () => {
     expect(stored?.maxAge).toBe(86400);
     expect(stored?.secure).toBe(isHttps);
     expect(/;\s*secure\b/i.test(sessionHeader ?? '')).toBe(isHttps);
+
+    // Also verify the Secure=true branch locally via x-forwarded-proto: https
+    const proxiedClient = getServer().createClient();
+    const proxiedRes = await proxiedClient.post<LoginResponse>(
+      '/api/auth/login',
+      { email: 'admin@grovia.io', password: 'grovia-demo-2026' },
+      { headers: { 'x-forwarded-proto': 'https' } }
+    );
+    expect(proxiedRes.status).toBe(200);
+    const proxiedCookie = proxiedRes.setCookies.find((header) =>
+      header.toLowerCase().startsWith('grovia_session=')
+    );
+    expect(proxiedCookie).toBeDefined();
+    expect(/;\s*secure\b/i.test(proxiedCookie ?? '')).toBe(true);
   });
 
   test('T1.v2.2.4: GET /api/auth/session with valid grovia_session returns 200 authenticated user', async () => {

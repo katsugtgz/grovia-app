@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { WaitlistRequestSchema } from '@/lib/validations';
-import { addWaitlistEntry, getWaitlist, getWaitlistCount } from '@/lib/db';
+import {
+  addWaitlistEntry,
+  getWaitlist,
+  getWaitlistCount,
+  isProductionDemoAdminBlocked,
+} from '@/lib/db';
 import { methodNotAllowed, parseJsonBody } from '@/lib/api-helpers';
 import { requireAuth } from '@/lib/auth';
 
@@ -10,13 +15,7 @@ export async function GET(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
 
-  const isUnoptedProductionDemoSession =
-    process.env.NODE_ENV === 'production' &&
-    process.env.ALLOW_DEMO_ADMIN !== '1' &&
-    !process.env.ADMIN_PASSWORD?.trim() &&
-    auth.user.email.toLowerCase() === 'admin@grovia.io';
-
-  if (auth.user.role !== 'admin' || isUnoptedProductionDemoSession) {
+  if (auth.user.role !== 'admin' || isProductionDemoAdminBlocked(auth.user.email)) {
     return NextResponse.json(
       { success: false, error: 'Forbidden' },
       {

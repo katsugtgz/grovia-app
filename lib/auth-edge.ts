@@ -14,6 +14,7 @@ export interface SessionUser {
 export interface SessionPayload extends SessionUser {
   iat: number;
   exp: number;
+  jti?: string;
 }
 
 const textEncoder = new TextEncoder();
@@ -139,6 +140,16 @@ function fromBase64Url(input: string): Uint8Array<ArrayBuffer> | null {
   }
 }
 
+function generateTokenId(): string {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  let hex = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    hex += bytes[i].toString(16).padStart(2, '0');
+  }
+  return hex;
+}
+
 export async function signSessionToken(
   user: SessionUser,
   ttlSeconds: number = SESSION_MAX_AGE_SECONDS
@@ -151,6 +162,7 @@ export async function signSessionToken(
     role: user.role,
     iat: now,
     exp: now + ttlSeconds,
+    jti: generateTokenId(),
   };
   const payloadB64 = toBase64Url(textEncoder.encode(JSON.stringify(payload)));
   const key = await getSigningKey();
@@ -160,9 +172,7 @@ export async function signSessionToken(
     toArrayBufferBytes(textEncoder.encode(payloadB64))
   );
   const sigB64 = toBase64Url(new Uint8Array(signature));
-  const signedToken = `${payloadB64}.${sigB64}`;
-  unrevokeSessionToken(signedToken);
-  return signedToken;
+  return `${payloadB64}.${sigB64}`;
 }
 
 export async function verifySessionToken(
@@ -217,7 +227,8 @@ export async function verifySessionToken(
     if (exp <= now) return null;
     if (isSessionTokenRevoked(token, now)) return null;
 
-    return { id, email, name, role, iat, exp };
+    const jti = typeof parsed.jti === 'string' && parsed.jti.length > 0 ? parsed.jti : undefined;
+    return jti ? { id, email, name, role, iat, exp, jti } : { id, email, name, role, iat, exp };
   } catch {
     return null;
   }

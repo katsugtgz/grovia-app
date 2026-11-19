@@ -306,6 +306,15 @@ export function isSameServerOrigin(target: URL, baseUrl: string): boolean {
   );
 }
 
+export function assertSameServerOrigin(target: URL, baseUrl: string): void {
+  if (!isSameServerOrigin(target, baseUrl)) {
+    const expected = new URL(baseUrl);
+    throw new Error(
+      `Expected redirect URL "${target.href}" to share server origin "${expected.origin}"`
+    );
+  }
+}
+
 export class LiveHttpClient {
   readonly baseUrl: string;
   readonly jar: CookieJar;
@@ -800,7 +809,8 @@ async function ensureProductionBuild(
           }
           const logs = logBuffer.toString();
           const isTransientFontFetch =
-            logs.includes('next/font') || logs.includes('googleFontFileUrl');
+            logs.includes('An error occurred in `next/font`') &&
+            (logs.includes('googleFontFileUrl') || logs.includes('Failed to fetch'));
           if (attempt < maxBuildAttempts && isTransientFontFetch) {
             continue;
           }

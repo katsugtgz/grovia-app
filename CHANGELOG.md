@@ -6,11 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Public Landing Page (`/`) & Login (`/login`)**: Public marketing landing experience with Bento feature highlights, pricing tiers, waitlist signup (`POST /api/waitlist`), route metadata/OpenGraph, and PII-free client bundles.
+- **Protected Workspace (`/workspace`) & Edge Middleware (`middleware.ts`)**: Authenticated Bento workspace with server-side `getServerSession()` defense-in-depth, SQLite-backed `people` directory and teammate invites (`GET`/`POST /api/people`), profile/sign-out menu, and `Book a demo` modal trigger.
+- **Expanded Verification Suite**: Verified `384 / 384` passing tests across `48` suites (unit, contract, stress, and 75 live HTTP E2E tests across Tiers 1–4) plus `100 / 100` on `react-doctor`.
+
 ### Changed
 
 - **LCP Shell Optimization**: Replaced the initial 1.6s cascading opacity entrance delay with an immediate zero-opacity-delay shell render (`useEntranceTimeline`) while preserving interactive GSAP view transitions, Flip filter morphing, and micro-interactions.
-- **Public Landing, Auth & Workspace Split**: Mounted public landing page at `/`, sign-in at `/login`, protected Bento workspace at `/workspace`, and Edge `middleware.ts` with HMAC-SHA256 `grovia_session` auth, fail-closed production secret enforcement, async `scrypt` password verification, login rate limiting, and server-side logout token revocation.
-- **Expanded Verification Suite**: Verified `381 / 381` passing tests across `48` suites (unit, contract, stress, and live HTTP E2E tiers 1–4) plus `100 / 100` on `react-doctor`.
+
+### Security
+
+- **Authentication & Session Hardening**: Explicit encoded scrypt cost parameters (`scrypt:N:r:p:salt:hash`) with non-blocking async `crypto.scrypt` verification, unique per-login `jti` HMAC-SHA256 `grovia_session` tokens, fail-closed production secret enforcement, verified server-side logout token revocation, bounded per-IP and per-email login rate limiting, and production gating of demo admin seeding/access.
 
 ## [0.1.0] - 2026-11-17
 

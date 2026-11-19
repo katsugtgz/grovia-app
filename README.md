@@ -56,7 +56,7 @@
 - **Compositor-Only Physics & `prefers-reduced-motion` Safety**: All animations strictly animate GPU-composited `transform` and `opacity` properties via GSAP 3.15 (`Flip`, `quickTo`, `power3.out`, `back.out`, `elastic.out`) and automatically snap when `prefers-reduced-motion: reduce` is enabled.
 - **Fullstack Next.js 15 Route Handlers + Bun SQLite (`WAL`)**: Real API persistence for waitlist signups, support inquiries/tickets, hiring pipeline metrics, and dynamic 12-month ROI modeling (`bun:sqlite` locally, with seamless in-memory serverless fallback on Netlify Node runtimes).
 - **Google Chrome Modern Web Guidance Aligned**: LCP portrait prioritization (`priority`), non-blocking interactions (INP-friendly transitions), CLS containment, native `<dialog>` modals with ESC/backdrop closing, and semantic ARIA landmarks/tablists.
-- **Zero-Defect Verification**: `381/381` passing tests across 48 suites (unit, contract, integration, stress, and live HTTP E2E tiers 1–4), strict ESLint + TypeScript checks, automated GitHub Actions CI & Netlify CD, and **`100 / 100 Great`** on `npx react-doctor@latest`.
+- **Zero-Defect Verification**: `384/384` passing tests across 48 suites (unit, contract, integration, stress, and live HTTP E2E tiers 1–4), strict ESLint + TypeScript checks, automated GitHub Actions CI & Netlify CD, and **`100 / 100 Great`** on `npx react-doctor@latest`.
 
 ---
 
@@ -98,7 +98,7 @@
 | `GET` | [`/api/health`](https://grovia-motion-fullstack.netlify.app/api/health) | Public | System status, Bun runtime version, uptime, and SQLite health check |
 | `POST` | `/api/roi` | Public | Zod-validated 12-month revenue projection & ROI multiple computation |
 | `POST` | `/api/waitlist` | Public | Book waitlist spot with case-insensitive deduplication (`409`) |
-| `GET` | `/api/waitlist` | Authenticated | List waitlist entries and total queue count (`401` when unauthenticated) |
+| `GET` | `/api/waitlist` | Authenticated (Admin) | List waitlist entries and total queue count (`401` when unauthenticated, `403` for non-admin or blocked prod demo session) |
 | `POST` | `/api/auth/login` | Public | Authenticate user and set `HttpOnly` `grovia_session` cookie |
 | `POST` | `/api/auth/logout` | Public | Clear `grovia_session` cookie (`Max-Age=0`) |
 | `GET` | `/api/auth/session` | Authenticated | Inspect active session user (`200` authenticated, `401` unauthenticated) |
@@ -153,7 +153,7 @@ Open [http://localhost:3000](http://localhost:3000) for the public landing page,
 | `bun run lint` | Run ESLint (`next lint`) |
 | `bun run typecheck` | Strict TypeScript type checking (`tsc --noEmit`) |
 | `bun run test` | Run core template/helper tests (`tests/core.test.ts`, invoked by `bun run validate`) |
-| `bun test` / `bun run test:all` | Run all 381 tests across 48 suites (unit, stress, E2E tiers 1–4, live HTTP v2) |
+| `bun test` / `bun run test:all` | Run all 384 tests across 48 suites (unit, stress, E2E tiers 1–4, live HTTP v2) |
 | `bun run doctor` | Execute `npx react-doctor@latest` (enforces `100 / 100` score) |
 | `bun run validate` | Fast validation pipeline (`lint && typecheck && test && build && doctor`); run `bun test` for the full 48-suite run |
 

@@ -763,44 +763,54 @@ async function ensureProductionBuild(
         return;
       }
 
-      const logBuffer = new RingLogBuffer(200);
-      const proc = Bun.spawn(['bun', '--bun', nextBin, 'build'], {
-        cwd: rootDir,
-        env: buildChildEnv(dbPath, extraEnv, { NODE_ENV: 'production' }),
-        stdout: 'pipe',
-        stderr: 'pipe',
-      });
+      const maxBuildAttempts = 2;
+      for (let attempt = 1; attempt <= maxBuildAttempts; attempt++) {
+        const logBuffer = new RingLogBuffer(200);
+        const proc = Bun.spawn(['bun', '--bun', nextBin, 'build'], {
+          cwd: rootDir,
+          env: buildChildEnv(dbPath, extraEnv, { NODE_ENV: 'production' }),
+          stdout: 'pipe',
+          stderr: 'pipe',
+        });
 
-      const stdoutDrain = drainStream(proc.stdout, '[build:out] ', logBuffer);
-      const stderrDrain = drainStream(proc.stderr, '[build:err] ', logBuffer);
+        const stdoutDrain = drainStream(proc.stdout, '[build:out] ', logBuffer);
+        const stderrDrain = drainStream(proc.stderr, '[build:err] ', logBuffer);
 
-      let timedOut = false;
-      const timer = setTimeout(() => {
-        timedOut = true;
+        let timedOut = false;
+        const timer = setTimeout(() => {
+          timedOut = true;
+          try {
+            proc.kill('SIGTERM');
+          } catch {
+            // Ignore kill errors
+          }
+        }, buildTimeoutMs);
+
         try {
-          proc.kill('SIGTERM');
-        } catch {
-          // Ignore kill errors
-        }
-      }, buildTimeoutMs);
+          const exitCode = await proc.exited;
+          await Promise.allSettled([stdoutDrain.done, stderrDrain.done]);
 
-      try {
-        const exitCode = await proc.exited;
-        await Promise.allSettled([stdoutDrain.done, stderrDrain.done]);
-
-        if (timedOut) {
+          if (timedOut) {
+            throw new Error(
+              `Next.js production build timed out after ${buildTimeoutMs}ms.\n${logBuffer.toString()}`
+            );
+          }
+          if (exitCode === 0) {
+            return;
+          }
+          const logs = logBuffer.toString();
+          const isTransientFontFetch =
+            logs.includes('next/font') || logs.includes('googleFontFileUrl');
+          if (attempt < maxBuildAttempts && isTransientFontFetch) {
+            continue;
+          }
           throw new Error(
-            `Next.js production build timed out after ${buildTimeoutMs}ms.\n${logBuffer.toString()}`
+            `Next.js production build failed with exit code ${exitCode}.\n${logs}`
           );
+        } finally {
+          clearTimeout(timer);
+          await Promise.allSettled([stdoutDrain.cancel(), stderrDrain.cancel()]);
         }
-        if (exitCode !== 0) {
-          throw new Error(
-            `Next.js production build failed with exit code ${exitCode}.\n${logBuffer.toString()}`
-          );
-        }
-      } finally {
-        clearTimeout(timer);
-        await Promise.allSettled([stdoutDrain.cancel(), stderrDrain.cancel()]);
       }
     })().catch((err: unknown) => {
       buildPromise = null;

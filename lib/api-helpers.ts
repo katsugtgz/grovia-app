@@ -21,6 +21,15 @@ export function methodNotAllowed(allowed: string[]): NextResponse {
 
 const DEFAULT_MAX_BODY_BYTES = 64 * 1024;
 
+function payloadTooLarge(): { error: NextResponse } {
+  return {
+    error: NextResponse.json(
+      { success: false, error: 'Request payload too large' },
+      { status: 413, headers: { 'Content-Type': 'application/json' } }
+    ),
+  };
+}
+
 /**
  * Safely parse JSON body from incoming Request with an enforced byte limit.
  * Returns structured 400/413 response for empty, oversized, or malformed JSON payloads.
@@ -34,23 +43,31 @@ export async function parseJsonBody<T = unknown>(
     if (contentLengthHeader) {
       const declaredLength = Number.parseInt(contentLengthHeader, 10);
       if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-        return {
-          error: NextResponse.json(
-            { success: false, error: 'Request payload too large' },
-            { status: 413, headers: { 'Content-Type': 'application/json' } }
-          ),
-        };
+        return payloadTooLarge();
       }
     }
 
-    const text = await request.text();
-    if (Buffer.byteLength(text, 'utf8') > maxBytes) {
-      return {
-        error: NextResponse.json(
-          { success: false, error: 'Request payload too large' },
-          { status: 413, headers: { 'Content-Type': 'application/json' } }
-        ),
-      };
+    let text = '';
+    const reader = request.body?.getReader();
+    if (reader) {
+      const decoder = new TextDecoder();
+      let receivedBytes = 0;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          receivedBytes += value.byteLength;
+          if (receivedBytes > maxBytes) {
+            // Cancellation may wait on the source. Return 413 without waiting for it.
+            void reader.cancel().catch(() => {});
+            return payloadTooLarge();
+          }
+          text += decoder.decode(value, { stream: true });
+        }
+        text += decoder.decode();
+      } finally {
+        reader.releaseLock();
+      }
     }
 
     if (!text || text.trim() === '') {

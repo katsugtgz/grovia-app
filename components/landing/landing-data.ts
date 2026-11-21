@@ -205,6 +205,26 @@ export async function submitWaitlistRequest(
       };
     }
 
+    if (response.status === 429) {
+      return {
+        ok: false,
+        status: 429,
+        error:
+          data?.error ||
+          'Too many requests right now. Please wait a moment and try again.',
+      };
+    }
+
+    if (response.status >= 500) {
+      return {
+        ok: false,
+        status: response.status,
+        error:
+          data?.error ||
+          'We are having trouble on our side. Please try again in a little bit.',
+      };
+    }
+
     return {
       ok: false,
       status: response.status,

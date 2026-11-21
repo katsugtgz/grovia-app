@@ -247,6 +247,30 @@ describe('Unit — M2 Landing Page, Login Page & PII Isolation', () => {
         error: 'Invalid email address',
       });
 
+      // 429 / 5xx without a useful JSON body must not blame the user's input.
+      const rateLimited = await submitWaitlistRequest(
+        baseValues,
+        createJsonFetch(429, null)
+      );
+      expect(rateLimited).toEqual({
+        ok: false,
+        status: 429,
+        error: 'Too many requests right now. Please wait a moment and try again.',
+      });
+
+      const serverError = await submitWaitlistRequest(
+        baseValues,
+        createJsonFetch(503, null)
+      );
+      expect(serverError.ok).toBe(false);
+      if (!serverError.ok) {
+        expect(serverError.status).toBe(503);
+        expect(serverError.error).toBe(
+          'We are having trouble on our side. Please try again in a little bit.'
+        );
+        expect(serverError.error).not.toContain('check your details');
+      }
+
       const failingFetch = (async () => {
         throw new Error('ECONNREFUSED');
       }) as unknown as typeof fetch;

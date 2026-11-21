@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { WorkspaceShell } from '@/components/WorkspaceShell';
+import { isRosterAdminSession } from '@/lib/db';
 import { resolveWorkspacePageState } from './workspace-helpers';
 
 export const dynamic = 'force-dynamic';
@@ -17,5 +18,11 @@ export default async function WorkspacePage() {
     redirect(state.redirectTo ?? '/login?next=%2Fworkspace');
   }
 
-  return <WorkspaceShell initialPeople={state.people} user={state.user} />;
+  return (
+    <WorkspaceShell
+      initialPeople={state.people}
+      user={state.user}
+      canManageRoster={isRosterAdminSession(state.user)}
+    />
+  );
 }

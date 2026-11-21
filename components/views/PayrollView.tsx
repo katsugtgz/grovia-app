@@ -191,7 +191,12 @@ export function PayrollView({ active, people }: PayrollViewProps) {
     >
       <div id="payroll-anchor" tabIndex={-1} className="sr-only" />
 
-      <div className="payroll">
+      {!currentPerson ? (
+        <div className="payroll">
+          <p className="table__empty">No roster data available for your role.</p>
+        </div>
+      ) : (
+        <div className="payroll">
         <PayrollRoster
           people={people}
           rosterIndices={ROSTER_INDICES}
@@ -220,7 +225,8 @@ export function PayrollView({ active, people }: PayrollViewProps) {
           hoursPlanVal={hoursPlanVal}
           onDownloadDoc={handleDownloadDoc}
         />
-      </div>
+        </div>
+      )}
     </div>
   );
 }

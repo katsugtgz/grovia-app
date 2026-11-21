@@ -19,9 +19,19 @@ import { DemoBookingModal } from '@/components/modals/DemoBookingModal';
 export interface WorkspaceShellProps {
   initialPeople: Person[];
   user: AuthUser;
+  /**
+   * Server-computed via `isRosterAdminSession(user)` (role + prod demo-admin
+   * block). Optional so direct component usages keep working; falls back to
+   * inferring from the roster it was given.
+   */
+  canManageRoster?: boolean;
 }
 
-export function WorkspaceShell({ initialPeople, user }: WorkspaceShellProps) {
+export function WorkspaceShell({
+  initialPeople,
+  user,
+  canManageRoster: canManageRosterProp,
+}: WorkspaceShellProps) {
   const [currentView, setCurrentView] = useState<ViewType>('overview');
   const [people, setPeople] = useState<Person[]>(initialPeople);
   const [greetingName, setGreetingName] = useState('Person 05');
@@ -176,6 +186,11 @@ export function WorkspaceShell({ initialPeople, user }: WorkspaceShellProps) {
     setPeople((prev) => [newPerson, ...prev]);
   };
 
+  // Server-computed permission wins (covers the blocked prod demo admin whose
+  // session role is 'admin' but whose access is revoked); fall back to
+  // inferring from the roster for direct component usage.
+  const canManageRoster = canManageRosterProp ?? people.length > 0;
+
   const existingEmails = people.map((p) => (p.email || '').toLowerCase()).filter(Boolean);
 
   return (
@@ -209,7 +224,7 @@ export function WorkspaceShell({ initialPeople, user }: WorkspaceShellProps) {
       <PeopleView
         active={currentView === 'people'}
         people={people}
-        onOpenInvite={() => setIsInviteOpen(true)}
+        onOpenInvite={canManageRoster ? () => setIsInviteOpen(true) : undefined}
       />
 
       <PayrollView
@@ -231,12 +246,14 @@ export function WorkspaceShell({ initialPeople, user }: WorkspaceShellProps) {
         onSave={handleSaveSettings}
       />
 
-      <InviteModal
-        isOpen={isInviteOpen}
-        onClose={() => setIsInviteOpen(false)}
-        existingEmails={existingEmails}
-        onInvite={handleNewPerson}
-      />
+      {canManageRoster && (
+        <InviteModal
+          isOpen={isInviteOpen}
+          onClose={() => setIsInviteOpen(false)}
+          existingEmails={existingEmails}
+          onInvite={handleNewPerson}
+        />
+      )}
 
       <DemoBookingModal
         isOpen={isDemoOpen}

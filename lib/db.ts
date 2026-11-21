@@ -701,6 +701,34 @@ export function isProductionDemoAdminBlocked(email: string): boolean {
   return email.trim().toLowerCase() === getConfiguredAdminEmail();
 }
 
+/**
+ * Single server-side policy for roster PII access (list + invite), shared by
+ * `/api/people` and the `/workspace` page so the API and the shell can never
+ * disagree about who may see or mutate the roster.
+ */
+export function isRosterAdminSession(session: {
+  role: string;
+  email: string;
+}): boolean {
+  return (
+    session.role === 'admin' && !isProductionDemoAdminBlocked(session.email)
+  );
+}
+
+/**
+ * Whether the well-known demo credentials (`admin@grovia.io` /
+ * `grovia-demo-2026`) are the ones actually seeded in this environment. The
+ * login page may render them only when this is true: configured
+ * `ADMIN_EMAIL`/`ADMIN_PASSWORD` overrides make the defaults stale, and
+ * production without `ALLOW_DEMO_ADMIN=1` does not seed them at all.
+ */
+export function showsDefaultDemoCredentials(): boolean {
+  if (!isDemoAdminAllowedInEnv()) return false;
+  if (getConfiguredAdminEmail() !== 'admin@grovia.io') return false;
+  if (process.env.ADMIN_PASSWORD?.trim()) return false;
+  return true;
+}
+
 export function ensureAuthAndPeopleSeeded(database: Database): void {
   const adminEmail = getConfiguredAdminEmail();
   const configuredAdminPassword = process.env.ADMIN_PASSWORD?.trim();

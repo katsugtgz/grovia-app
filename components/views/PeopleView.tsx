@@ -19,7 +19,8 @@ if (typeof window !== 'undefined') {
 export interface PeopleViewProps {
   active: boolean;
   people: Person[];
-  onOpenInvite: () => void;
+  /** Open the invite dialog; omit when the session may not invite (e.g. non-admin). */
+  onOpenInvite?: () => void;
 }
 
 const TEAMS = ['all', ...PEOPLE_TEAMS] as const;
@@ -233,15 +234,17 @@ export function PeopleView({ active, people, onOpenInvite }: PeopleViewProps) {
             />
           </label>
 
-          <button
-            className="dark-btn magnetic"
-            type="button"
-            id="add-member"
-            onClick={onOpenInvite}
-          >
-            <Icon name="plus" className="ico" aria-hidden="true" />
-            Add member
-          </button>
+          {onOpenInvite && (
+            <button
+              className="dark-btn magnetic"
+              type="button"
+              id="add-member"
+              onClick={onOpenInvite}
+            >
+              <Icon name="plus" className="ico" aria-hidden="true" />
+              Add member
+            </button>
+          )}
         </div>
       </div>
 

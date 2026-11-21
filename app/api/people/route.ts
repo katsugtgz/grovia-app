@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { methodNotAllowed, parseJsonBody } from '@/lib/api-helpers';
 import { requireAuth } from '@/lib/auth';
-import { createPerson, getPeople } from '@/lib/db';
+import { createPerson, getPeople, isRosterAdminSession } from '@/lib/db';
 import type { PeopleListResponse, PersonInviteResponse } from '@/lib/types';
 import { InvitePersonRequestSchema } from '@/lib/validations';
 
@@ -9,9 +9,24 @@ export const dynamic = 'force-dynamic';
 
 const MAX_INVITE_BODY_BYTES = 16 * 1024;
 
+function forbiddenResponse(): NextResponse {
+  return NextResponse.json(
+    { success: false, error: 'Forbidden' },
+    {
+      status: 403,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    }
+  );
+}
+
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
+
+  if (!isRosterAdminSession(auth.user)) return forbiddenResponse();
 
   try {
     const people = getPeople();
@@ -43,6 +58,8 @@ export async function GET(request: Request): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
+
+  if (!isRosterAdminSession(auth.user)) return forbiddenResponse();
 
   const { data: rawBody, error: parseError } = await parseJsonBody(
     request,

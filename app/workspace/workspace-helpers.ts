@@ -1,5 +1,5 @@
 import { getServerSession, type SessionPayload } from '@/lib/auth';
-import { getPeople } from '@/lib/db';
+import { getPeople, isRosterAdminSession } from '@/lib/db';
 import type { AuthUser, Person } from '@/lib/types';
 
 export interface ResolveWorkspacePageStateArgs {
@@ -13,6 +13,11 @@ export interface WorkspacePageState {
   people: Person[];
 }
 
+/**
+ * Roster PII (emails, phones, birthdays, pay rates) is admin-only, mirroring
+ * `GET /api/people`. Non-admin sessions still get an operational shell, but
+ * with an empty roster; the client hides roster-dependent actions accordingly.
+ */
 export async function resolveWorkspacePageState({
   getSession = getServerSession,
   loadPeople = getPeople,
@@ -33,9 +38,11 @@ export async function resolveWorkspacePageState({
     role: session.role,
   };
 
+  const people = isRosterAdminSession(user) ? loadPeople() : [];
+
   return {
     redirectTo: null,
     user,
-    people: loadPeople(),
+    people,
   };
 }

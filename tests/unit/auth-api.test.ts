@@ -776,6 +776,21 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       expect(overDefault.error?.status).toBe(413);
     });
 
+    test('parseJsonBody rejects a previously consumed request body', async () => {
+      const request = new Request('http://localhost:3000/api/waitlist', {
+        method: 'POST',
+        body: '{}',
+      });
+      await request.text();
+
+      const { error } = await parseJsonBody(request);
+      expect(error?.status).toBe(400);
+      expect(await error?.json()).toEqual({
+        success: false,
+        error: 'Invalid or missing JSON payload',
+      });
+    });
+
     test('login rate limiter enforces email/IP thresholds, expiry, release rollback, proxy trust, and lowest-count eviction', () => {
       resetLoginAttemptTracker();
       const t0 = 1_700_000_000_000;

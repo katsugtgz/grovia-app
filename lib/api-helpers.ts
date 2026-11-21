@@ -30,6 +30,15 @@ function payloadTooLarge(): { error: NextResponse } {
   };
 }
 
+function invalidJsonPayload(): { error: NextResponse } {
+  return {
+    error: NextResponse.json(
+      { success: false, error: 'Invalid or missing JSON payload' },
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
+    ),
+  };
+}
+
 /**
  * Safely parse JSON body from incoming Request with an enforced byte limit.
  * Returns structured 400/413 response for empty, oversized, or malformed JSON payloads.
@@ -38,6 +47,8 @@ export async function parseJsonBody<T = unknown>(
   request: Request,
   maxBytes: number = DEFAULT_MAX_BODY_BYTES
 ): Promise<{ data?: T; error?: NextResponse }> {
+  if (request.bodyUsed) return invalidJsonPayload();
+
   try {
     const contentLengthHeader = request.headers.get('content-length');
     if (contentLengthHeader) {
@@ -81,11 +92,6 @@ export async function parseJsonBody<T = unknown>(
     const data = JSON.parse(text);
     return { data: data as T };
   } catch {
-    return {
-      error: NextResponse.json(
-        { success: false, error: 'Invalid or missing JSON payload' },
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      ),
-    };
+    return invalidJsonPayload();
   }
 }

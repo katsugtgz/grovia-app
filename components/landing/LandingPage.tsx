@@ -45,7 +45,11 @@ export function LandingPage({ header }: LandingPageProps) {
       if (!section) return;
 
       e.preventDefault();
-      window.history.pushState(null, '', href);
+      // Only push a history entry when the hash actually changes; repeated
+      // clicks on the same link must not pile duplicate Back-button entries.
+      if (window.location.hash !== href) {
+        window.history.pushState(null, '', href);
+      }
       window.dispatchEvent(new Event('hashchange'));
       section.scrollIntoView({
         behavior: isReducedMotion() ? 'auto' : 'smooth',

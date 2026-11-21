@@ -28,9 +28,9 @@ export function LandingHeader() {
 
     const handleHashChange = () => {
       const fromHash = parseLandingHash(window.location.hash);
-      if (fromHash) {
-        setActiveSection(fromHash);
-      }
+      // An empty or non-section hash clears the highlight; with no observer
+      // (unsupported/no sections) this is the only highlight source.
+      setActiveSection(fromHash);
     };
 
     handleHashChange();
@@ -42,18 +42,33 @@ export function LandingHeader() {
 
     let observer: IntersectionObserver | null = null;
     if (typeof IntersectionObserver !== 'undefined' && elements.length > 0) {
+      // Latest observation per section. The callback receives only the sections
+      // whose status changed in that batch, so keeping the full map here is
+      // what lets us re-pick the most visible section and clear the highlight
+      // when nothing is in the band (e.g. scrolled back to the hero).
+      const visibility = new Map<string, { intersecting: boolean; ratio: number }>();
+
+      const pickMostVisible = () => {
+        let topId: string | null = null;
+        let topRatio = 0;
+        for (const [id, state] of visibility) {
+          if (state.intersecting && state.ratio > topRatio) {
+            topId = id;
+            topRatio = state.ratio;
+          }
+        }
+        setActiveSection(topId ? parseLandingHash(topId) : null);
+      };
+
       observer = new IntersectionObserver(
         (entries) => {
-          const visible = entries
-            .filter((entry) => entry.isIntersecting)
-            .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-          const topEntry = visible[0];
-          if (topEntry?.target.id) {
-            const matched = parseLandingHash(topEntry.target.id);
-            if (matched) {
-              setActiveSection(matched);
-            }
+          for (const entry of entries) {
+            visibility.set(entry.target.id, {
+              intersecting: entry.isIntersecting,
+              ratio: entry.intersectionRatio,
+            });
           }
+          pickMostVisible();
         },
         { rootMargin: '-20% 0px -55% 0px', threshold: [0.1, 0.25, 0.5] }
       );
@@ -68,23 +83,6 @@ export function LandingHeader() {
       observer?.disconnect();
     };
   }, []);
-
-  const handleNavClick = (
-    e: React.MouseEvent<HTMLAnchorElement>,
-    sectionId: LandingSectionId
-  ) => {
-    if (
-      e.defaultPrevented ||
-      e.button !== 0 ||
-      e.metaKey ||
-      e.ctrlKey ||
-      e.shiftKey ||
-      e.altKey
-    ) {
-      return;
-    }
-    setActiveSection(sectionId);
-  };
 
   return (
     <header className="top landing__top">
@@ -102,7 +100,6 @@ export function LandingHeader() {
               className={`landing__nav-link${isActive ? ' is-active' : ''}`}
               href={section.href}
               aria-current={isActive ? 'location' : undefined}
-              onClick={(e) => handleNavClick(e, section.id)}
             >
               {section.label}
             </a>

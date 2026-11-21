@@ -1033,7 +1033,7 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       clearRevokedSessionTokens();
     });
 
-    test('credential-version gating: private-mode production rejects legacy admin tokens, accepts fresh private sign-ins', async () => {
+    test('credential-version token verification rejects legacy admin tokens and accepts directly signed private admin and member tokens', async () => {
       // Fixed secret for the whole test: signing-key changes must not be the
       // reason a token is rejected — only the credential version is.
       const prevAuthSecret = process.env.AUTH_SECRET;
@@ -1210,4 +1210,49 @@ process.exit(failures === 0 ? 0 : 1);
       }
     });
   });
+});
+
+test('POST /api/auth/login issues a valid session for the configured private admin in production', async () => {
+  const email = 'private-login-admin@grovia.io';
+  const password = 'private-login-fixture-password';
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'grovia-private-login-'));
+  const dbPath = path.join(directory, 'auth.db');
+  const mutableEnv = process.env as Record<string, string | undefined>;
+  const overrides = {
+    NODE_ENV: 'production',
+    ADMIN_EMAIL: email,
+    ADMIN_PASSWORD: password,
+    AUTH_SECRET: 'private-login-fixture-signing-secret',
+    ALLOW_DEMO_ADMIN: '0',
+    DB_PATH: dbPath,
+  };
+  const previous = Object.keys(overrides).map((key) => [key, mutableEnv[key]] as const);
+
+  try {
+    Object.assign(mutableEnv, overrides);
+    initDatabase(dbPath);
+
+    const response = await loginRoute.POST(
+      new Request('https://localhost/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const token = parseCookieValue(response.headers.get('set-cookie'), SESSION_COOKIE_NAME);
+    expect(await verifySessionToken(token)).toMatchObject({
+      id: expect.any(Number),
+      email,
+      role: 'admin',
+    });
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete mutableEnv[key];
+      else mutableEnv[key] = value;
+    }
+    closeDb();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });

@@ -169,13 +169,14 @@ export function CalendarCard({ people = EMPTY_PEOPLE }: CalendarCardProps) {
     }
   };
 
-  // Entrance animation when week changes after initial mount
-  const hasMountedWeekRef = useRef(false);
+  // Entrance animation when week changes after initial mount. Track the last
+  // animated week (initialized to the initial week) instead of a boolean mount
+  // flag: in StrictMode the mount effect runs twice, and the second run sees no
+  // week change and returns without replaying the entrance.
+  const lastAnimatedWeekRef = useRef(weekIdx);
   useEffect(() => {
-    if (!hasMountedWeekRef.current) {
-      hasMountedWeekRef.current = true;
-      return;
-    }
+    if (lastAnimatedWeekRef.current === weekIdx) return;
+    lastAnimatedWeekRef.current = weekIdx;
     if (isReducedMotion() || !calGridRef.current || !titleRef.current) return;
 
     const dynEls = calGridRef.current.querySelectorAll('.cal__dyn');

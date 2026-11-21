@@ -11,8 +11,8 @@ import {
   verifySessionToken,
 } from '@/lib/auth-edge';
 import { closeDb, initDatabase } from '@/lib/db';
-import { MAX_FAILED_LOGIN_ATTEMPTS } from '@/lib/login-rate-limit';
 import { middleware } from '@/middleware';
+import { resolveAdminEmail, resolveAdminPassword } from '../e2e/harness/admin-env';
 import { createTestClient, resetDatabase, type TestClient } from '../e2e/harness/test-client';
 
 const BASE_URL = 'http://localhost:3000';
@@ -126,13 +126,15 @@ describe('Full-App Stress, Concurrency, Race Deduplication & Security Fuzzing Su
 
   describe('1. High-Concurrency Burst Requests Across All Routes & APIs', () => {
     test('Auth burst: concurrent POST /api/auth/login, GET /api/auth/session, and POST /api/auth/logout', async () => {
-      const waveSize = MAX_FAILED_LOGIN_ATTEMPTS;
-      const waves = 2;
+      const waveSize = 5;
+      const waves = 4;
       const latencies: number[] = [];
+      const adminEmail = resolveAdminEmail();
+      const adminPassword = resolveAdminPassword();
+      if (!adminPassword) throw new Error('Admin password is required for this fixture');
 
-      // Intentionally split into two waves of MAX_FAILED_LOGIN_ATTEMPTS (halving peak
-      // single-account concurrency) to stay within the synchronous in-flight per-email limiter
-      // cap; wave 2 stays under the limit because wave 1's successful logins clear the email bucket.
+      // Keep fixture batches below the production in-flight cap. This case
+      // measures the ordinary session lifecycle, not admission at capacity.
       const loginOutcomes: Array<{
         result: { client: TestClient; res: Awaited<ReturnType<TestClient['login']>>; isValid: boolean };
         durationMs: number;
@@ -142,10 +144,10 @@ describe('Full-App Stress, Concurrency, Race Deduplication & Security Fuzzing Su
           Array.from({ length: waveSize }, (_, i) =>
             timedCall(async () => {
               const client = createTestClient(undefined, { directOnly: true });
-              const isValid = i % 5 !== 4;
+              const isValid = i !== waveSize - 1;
               const res = await client.login(
-                'admin@grovia.io',
-                isValid ? 'grovia-demo-2026' : `wrong-password-${w}-${i}`
+                adminEmail,
+                isValid ? adminPassword : `wrong-password-${w}-${i}`
               );
               return { client, res, isValid };
             })
@@ -159,7 +161,7 @@ describe('Full-App Stress, Concurrency, Race Deduplication & Security Fuzzing Su
         if (result.isValid) {
           expect(result.res.status).toBe(200);
           expect(result.res.data.success).toBe(true);
-          expect(result.res.data.user.email).toBe('admin@grovia.io');
+          expect(result.res.data.user.email).toBe(adminEmail);
           expect(result.client.getCookie(SESSION_COOKIE_NAME)).toBeTruthy();
         } else {
           expect(result.res.status).toBe(401);
@@ -182,7 +184,7 @@ describe('Full-App Stress, Concurrency, Race Deduplication & Security Fuzzing Su
         if (result.isValid) {
           expect(result.sessionRes.status).toBe(200);
           expect(result.sessionRes.data.authenticated).toBe(true);
-          expect(result.sessionRes.data.user.email).toBe('admin@grovia.io');
+          expect(result.sessionRes.data.user.email).toBe(adminEmail);
         } else {
           expect(result.sessionRes.status).toBe(401);
           expect(result.sessionRes.data.authenticated).toBe(false);

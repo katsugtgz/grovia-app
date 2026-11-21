@@ -34,5 +34,6 @@ jobs:
 
       - uses: millionco/react-doctor@695e46eee203a5d1855020191aa7e9c010a1250e # v2
         with:
+          version: '0.9.23'
           blocking: warning
           scope: full

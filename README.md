@@ -54,7 +54,7 @@
 
 - **Exact Grovia Aesthetic & Motion Choreography**: Warm sage-green Bento surfaces (`38px` / `28px` radii, inset white hairline elevation), Outfit & Inter typography, 31-glyph SVG sprite (`Icon.tsx`), sliding navigation pill with direction-aware `capL` / `mid` / `capR` GSAP delays, and an immediate zero-opacity-delay shell render (LCP optimization) while preserving interactive GSAP view transitions.
 - **Compositor-Only Physics & `prefers-reduced-motion` Safety**: All animations strictly animate GPU-composited `transform` and `opacity` properties via GSAP 3.15 (`Flip`, `quickTo`, `power3.out`, `back.out`, `elastic.out`) and automatically snap when `prefers-reduced-motion: reduce` is enabled.
-- **Fullstack Next.js 15 Route Handlers + Bun SQLite (`WAL`)**: Real API persistence for waitlist signups, support inquiries/tickets, hiring pipeline metrics, and dynamic 12-month ROI modeling (`bun:sqlite` locally, with seamless in-memory serverless fallback on Netlify Node runtimes).
+- **Fullstack Next.js 15 Route Handlers + Bun SQLite (`WAL`)**: Persists waitlist signups and support inquiries locally on a writable volume, and serves hiring pipeline metrics and ROI modeling. The Node fallback is not durable on Netlify Functions.
 - **Google Chrome Modern Web Guidance Aligned**: LCP portrait prioritization (`priority`), non-blocking interactions (INP-friendly transitions), CLS containment, native `<dialog>` modals with ESC/backdrop closing, and semantic ARIA landmarks/tablists.
 - **Zero-Defect Verification**: `384/384` passing tests across 48 suites (unit, contract, integration, stress, and live HTTP E2E tiers 1–4), strict ESLint + TypeScript checks, automated GitHub Actions CI & Netlify CD, and **`100 / 100 Great`** on `npx react-doctor@latest`.
 
@@ -87,7 +87,7 @@
 | **People Directory** | Instant search across name/role/team, GSAP `Flip` animated team filter pills (`All`, `Design`, `Engineering`, `Product`, `Operations`), selectable table rows, procedural SVG avatars (`no()`), floating bulk action tray with CSV export | [`components/views/PeopleView.tsx`](./components/views/PeopleView.tsx) |
 | **Payroll & PDF Export** | Keyboard-navigable teammate roster, 30-day PRNG timesheet matrix with staggered chip reveals, base + 1.5x overtime & deduction computation, pure client-side binary PDF 1.4 contract & payslip generator | [`components/views/PayrollView.tsx`](./components/views/PayrollView.tsx) |
 | **Modals & Tray** | Notification drawer with bell-shake trigger, Workspace Settings dialog (`localStorage` persisted), Invite Teammate dialog (`POST /api/people`) with field-shake validation, Demo Booking modal | [`components/modals/`](./components/modals/) |
-| **Persistence Engine** | WAL-mode `bun:sqlite` schema (`users`, `people`, `waitlist`, `inquiries`) with unique indexes, transactional inserts, health probes, and serverless fallback | [`lib/db.ts`](./lib/db.ts) |
+| **Persistence Engine** | WAL-mode `bun:sqlite` schema (`users`, `people`, `waitlist`, `inquiries`) with unique indexes, transactional inserts, and health probes; non-durable Node fallback on Netlify Functions | [`lib/db.ts`](./lib/db.ts) |
 
 ---
 
@@ -162,10 +162,12 @@ Open [http://localhost:3000](http://localhost:3000) for the public landing page.
 ## CI/CD & Repository Governance
 
 - **Continuous Integration ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml))**: Runs on pushes and PRs targeting `main` or `master`: `bun install --frozen-lockfile` → `bun run lint` → `bun run typecheck` → `bun test` → `bun run build`.
-- **React Doctor ([`.github/workflows/react-doctor.yml`](./.github/workflows/react-doctor.yml))**: A separate workflow runs on PRs when opened, updated, reopened, or marked ready for review, and on pushes to `main`. It uses the commit-pinned [React Doctor v2 action](https://github.com/millionco/react-doctor/tree/695e46eee203a5d1855020191aa7e9c010a1250e) to scan the full project and fails on warnings.
+- **React Doctor ([`.github/workflows/react-doctor.yml`](./.github/workflows/react-doctor.yml))**: A separate workflow runs on PRs when opened, updated, reopened, or marked ready for review, and on pushes to `main`. It pins both the [React Doctor v2 action](https://github.com/millionco/react-doctor/tree/695e46eee203a5d1855020191aa7e9c010a1250e) and scanner version, scans the full project, and fails on warnings.
 - **Continuous Deployment ([`.github/workflows/cd.yml`](./.github/workflows/cd.yml))**: Automatically builds and deploys `main` to [Netlify Production](https://grovia-motion-fullstack.netlify.app) via `bunx netlify-cli deploy --prod`.
 - **Branch Protection**: `main` requires passing `test` status check, up-to-date branches, conversation resolution, pull request review, and disallows force-pushes or branch deletion.
 - **Security & Community**: Equipped with [`LICENSE`](./LICENSE) (MIT), [`CONTRIBUTING.md`](./CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md), [`SECURITY.md`](./SECURITY.md), [`CHANGELOG.md`](./CHANGELOG.md), Dependabot updates, and PR/Issue templates.
+
+**Netlify storage limitation:** Standard [Netlify Functions](https://docs.netlify.com/build/functions/overview/) run in ephemeral environments. A writable `NETLIFY_DB_PATH` only changes the local snapshot location; it does not make writes durable or shared across instances. Do not rely on this deployment to retain waitlist signups, inquiries, or roster changes. Durable production writes require a provisioned shared database and a transactional adapter with schema migration and cross-instance verification, or moving the app to a host with a persistent volume for SQLite.
 
 ---
 

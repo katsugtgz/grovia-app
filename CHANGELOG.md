@@ -16,6 +16,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **LCP Shell Optimization**: Replaced the initial 1.6s cascading opacity entrance delay with an immediate zero-opacity-delay shell render (`useEntranceTimeline`) while preserving interactive GSAP view transitions, Flip filter morphing, and micro-interactions.
 
+### Fixed
+
+- Workspace navigation cancels superseded animations; payroll keeps the same person and demo hours when People is reordered or updated.
+- JSON request limits count raw bytes as they arrive. Login callbacks unlock the form when they do not navigate.
+
 ### Security
 
 - **Authentication & Session Hardening**: Explicit encoded scrypt cost parameters (`scrypt:N:r:p:salt:hash`) with non-blocking async `crypto.scrypt` verification, unique per-login `jti` HMAC-SHA256 `grovia_session` tokens, fail-closed production secret enforcement, verified server-side logout token revocation, bounded per-IP and per-email login rate limiting, and production gating of demo admin seeding/access.

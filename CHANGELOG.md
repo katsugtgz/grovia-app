@@ -19,6 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Security
 
 - **Authentication & Session Hardening**: Explicit encoded scrypt cost parameters (`scrypt:N:r:p:salt:hash`) with non-blocking async `crypto.scrypt` verification, unique per-login `jti` HMAC-SHA256 `grovia_session` tokens, fail-closed production secret enforcement, verified server-side logout token revocation, bounded per-IP and per-email login rate limiting, and production gating of demo admin seeding/access.
+  Logout revocation and login rate limits are stored in process memory and are not shared across instances. Multi-instance or serverless deployments need a shared store to enforce both consistently.
 
 ## [0.1.0] - 2026-11-17
 

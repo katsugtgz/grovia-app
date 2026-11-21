@@ -20,12 +20,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - Workspace navigation cancels superseded animations; payroll keeps the same person and demo hours when People is reordered or updated.
 - JSON request limits count raw bytes as they arrive. Login callbacks unlock the form when they do not navigate.
+- **JSON Snapshots**: Corrupt fallback snapshots (malformed JSON, invalid counters, duplicate rows) are rejected instead of loaded or overwritten, preserving the operator's data.
+- **Administrator Setup**: Email collisions with the configured administrator are rejected before seed writes instead of silently reusing an existing account.
 
 ### Security
 
 - **Authentication & Session Hardening**: Explicit encoded scrypt cost parameters (`scrypt:N:r:p:salt:hash`) with non-blocking async `crypto.scrypt` verification, unique per-login `jti` HMAC-SHA256 `grovia_session` tokens, fail-closed production secret enforcement, verified server-side logout token revocation, bounded per-IP and per-email login rate limiting, and production gating of demo admin seeding/access.
   Logout revocation and login rate limits are stored in process memory and are not shared across instances. Multi-instance or serverless deployments need a shared store to enforce both consistently.
-- Reject malformed JSON snapshots and administrator email collisions before writes. Preserve pending login reservations under capacity pressure and keep logout revocations until signed expiry. Normalize administrator credential stamps consistently with login.
+- **Login Reservations**: In-progress sign-ins keep their place while the rate limiter is full, instead of losing their reservation when a request fails.
+- **Signed Revocation**: Logout revocations persist until the session's signed expiry instead of a fixed window.
+- **Credential Normalization**: Harmless whitespace changes (and letter-case changes in the configured email) no longer sign out active administrators.
 
 ## [0.1.0] - 2026-11-17
 

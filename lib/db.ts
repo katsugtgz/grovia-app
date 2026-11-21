@@ -74,6 +74,15 @@ interface DummyStores {
   nextUserId: number;
 }
 
+type UnknownRecord = Record<string, unknown>;
+
+const STORE_ARRAY_KEYS = ['waitlist', 'inquiries', 'users', 'people'] as const;
+const STORE_COUNTER_KEYS = ['nextWaitlistId', 'nextInquiryId', 'nextUserId'] as const;
+
+function isPlainObject(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 declare global {
   // eslint-disable-next-line no-var
   var __grovia_db__: Database | undefined;
@@ -109,6 +118,16 @@ function getDummyStoreSnapshotPath(): string | null {
   const rawPath = activePath || explicitEnvPath || getDatabasePath();
   const trimmed = rawPath.trim();
   if (!trimmed || trimmed === ':memory:') return null;
+  return getSnapshotPathFor(trimmed);
+}
+
+/**
+ * Resolves the JSON snapshot path for a concrete database path (normalized,
+ * absolute). Pure: env-independent given the argument, so cache invalidation
+ * can compare the previous path with the incoming one.
+ */
+function getSnapshotPathFor(rawDbPath: string): string {
+  const trimmed = rawDbPath.trim();
   const normalized = trimmed.startsWith('file:') ? trimmed.slice(5) : trimmed;
   return path.isAbsolute(normalized)
     ? `${normalized}.store.json`
@@ -142,8 +161,20 @@ function persistDummyStores(stores: DummyStores): void {
     fs.mkdirSync(dir, { recursive: true });
   }
   const tmpPath = `${snapshotPath}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(stores), 'utf8');
-  fs.renameSync(tmpPath, snapshotPath);
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(stores), 'utf8');
+    fs.renameSync(tmpPath, snapshotPath);
+  } catch (err) {
+    // Remove the half-written snapshot copy so repeated failures cannot
+    // litter the volume with duplicate store data; never mask the original
+    // error.
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      // Nothing to clean or already gone.
+    }
+    throw err;
+  }
 }
 
 function commitDummyMutation(stores: DummyStores, rollback: () => void): void {
@@ -158,15 +189,49 @@ function commitDummyMutation(stores: DummyStores, rollback: () => void): void {
 function getDummyStores(): DummyStores {
   if (!globalThis.__grovia_dummy_stores__) {
     const snapshotPath = getDummyStoreSnapshotPath();
-    if (snapshotPath && fs.existsSync(snapshotPath)) {
+    if (snapshotPath) {
+      let raw: string | null = null;
       try {
-        const parsed = JSON.parse(fs.readFileSync(snapshotPath, 'utf8')) as DummyStores;
-        if (parsed && Array.isArray(parsed.people) && Array.isArray(parsed.waitlist)) {
-          globalThis.__grovia_dummy_stores__ = parsed;
-          return globalThis.__grovia_dummy_stores__;
+        raw = fs.readFileSync(snapshotPath, 'utf8');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+          // Fail closed: an existing-but-unreadable snapshot may hold real
+          // records. Never seed baseline data over it — that would overwrite
+          // the operator's last recovery copy.
+          throw new Error(
+            `Failed to load existing data snapshot at ${snapshotPath}; refusing to overwrite it with seed data.`,
+            { cause: err }
+          );
         }
-      } catch {
-        // Fall back to baseline seed state if snapshot is unreadable
+        // ENOENT: no snapshot yet — seed baseline below.
+      }
+      if (raw !== null) {
+        let parsed: UnknownRecord;
+        try {
+          parsed = JSON.parse(raw) as UnknownRecord;
+        } catch (err) {
+          throw new Error(
+            `Failed to parse existing data snapshot at ${snapshotPath}; refusing to overwrite it with seed data.`,
+            { cause: err }
+          );
+        }
+        // Complete-shape validation: every store array and every counter the
+        // JSON adapter relies on must be present and well-typed. Partial
+        // snapshots (e.g. hand-edited or truncated mid-write by an older
+        // version) are rejected, not partially accepted.
+        const missingOrBad = !isPlainObject(parsed)
+          ? 'root'
+          : STORE_ARRAY_KEYS.filter((k) => !Array.isArray(parsed[k])).join(',') ||
+            STORE_COUNTER_KEYS.filter(
+              (k) => typeof parsed[k] !== 'number' || !Number.isFinite(parsed[k] as number)
+            ).join(',');
+        if (missingOrBad) {
+          throw new Error(
+            `Data snapshot at ${snapshotPath} is malformed (bad: ${missingOrBad}); refusing to overwrite it with seed data.`
+          );
+        }
+        globalThis.__grovia_dummy_stores__ = parsed as unknown as DummyStores;
+        return globalThis.__grovia_dummy_stores__;
       }
     }
 
@@ -855,6 +920,13 @@ export function initDatabase(dbPath?: string): Database {
     globalThis.__grovia_db_path__ = undefined;
   }
 
+  // Snapshot rows are cached per process; a re-init at any path must drop
+  // them so stale rows can never flush into the new snapshot — including the
+  // case where env already points at a different path (the previous path is
+  // no longer observable here, so unconditional clearing is the only safe
+  // order).
+  globalThis.__grovia_dummy_stores__ = undefined;
+
   const DbConstructor = getDatabaseConstructor();
   globalThis.__grovia_db_path__ = targetPath;
   const database = new DbConstructor(targetPath, { create: true });
@@ -916,6 +988,10 @@ export function closeDb(): void {
       // Ignore if already closed
     }
     globalThis.__grovia_db__ = undefined;
+    globalThis.__grovia_db_path__ = undefined;
+    // Drop snapshot rows so a close followed by re-init at another path can
+    // never flush this path's rows into the new snapshot.
+    globalThis.__grovia_dummy_stores__ = undefined;
   }
 }
 

@@ -5,9 +5,8 @@ import Link from 'next/link';
 import gsap from 'gsap';
 import { $, isReducedMotion } from '@/lib/motion';
 import { Icon } from '@/components/ui/Icon';
+import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASS } from '@/lib/demo-credentials';
 import {
-  DEMO_ADMIN_EMAIL,
-  DEMO_ADMIN_PASS,
   resolveSafeNext,
   submitLoginRequest,
   validateLoginInput,

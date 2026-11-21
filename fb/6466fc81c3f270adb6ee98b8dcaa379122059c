@@ -1,0 +1,16 @@
+CHANGELOG.md
+  h_cc1f32aec57e6b 28
+README.md
+  h_cc1f32aec57e6b 167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fb6466fc81c3f270adb6ee98b8dcaa379122059c",
+  "prompts": {},
+  "humans": {
+    "h_cc1f32aec57e6b": {
+      "author": "Muhammad Naufal Mahdi <053792227@ecampus.ut.ac.id>"
+    }
+  }
+}

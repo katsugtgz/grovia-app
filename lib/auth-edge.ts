@@ -1,4 +1,4 @@
-import { isAdminCredentialGateActive } from './admin-mode';
+import { isAdminCredentialGateActive, resolveConfiguredAdminEmail } from './admin-mode';
 
 export const SESSION_COOKIE_NAME = 'grovia_session';
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24; // 86400s (24h)
@@ -68,9 +68,12 @@ export function revokeSessionToken(
   if (!token || typeof token !== 'string') return;
   const nowSec = Math.floor(Date.now() / 1000);
   pruneRevokedTokens(nowSec);
+  // Store the token's own expiry directly: the revocation deadline is the
+  // signed exp verbatim, so a fractional expiry is revoked through its final
+  // partial second and never a whole second longer than necessary.
   const deadlineSec =
     typeof tokenExpSec === 'number' && Number.isFinite(tokenExpSec) && tokenExpSec > nowSec
-      ? Math.floor(tokenExpSec)
+      ? tokenExpSec
       : nowSec + SESSION_MAX_AGE_SECONDS;
   getRevokedTokensMap().set(token, deadlineSec);
 }
@@ -125,8 +128,8 @@ const CRED_VERSION_DOMAIN = 'grovia.session.cred.v1';
  * effect immediately with no invalidation key to grow stale.
  */
 async function currentCredentialVersion(): Promise<string> {
-  const password = process.env.ADMIN_PASSWORD ?? '';
-  const email = (process.env.ADMIN_EMAIL ?? '').trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD?.trim() ?? '';
+  const email = resolveConfiguredAdminEmail();
   const encode = (field: string): Uint8Array<ArrayBuffer> => {
     const bytes = textEncoder.encode(field);
     const out = new Uint8Array(new ArrayBuffer(4 + bytes.byteLength));

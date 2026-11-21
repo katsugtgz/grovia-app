@@ -23,6 +23,18 @@ export function isPrivateAdminMode(): boolean {
  */
 export function getConfiguredPrivateAdminEmail(): string | null {
   if (!isPrivateAdminMode()) return null;
+  return resolveConfiguredAdminEmail();
+}
+
+/**
+ * Effective seeded admin identity: trimmed + lower-cased `ADMIN_EMAIL`, or the
+ * demo address when unset/blank — identical to
+ * `getConfiguredPrivateAdminEmail` minus the private-mode gate. Edge-safe (no
+ * node builtins) so the session layer's credential stamp and the DB seeding
+ * layer derive the identity through one shared rule and can never disagree on
+ * what "the configured admin" means.
+ */
+export function resolveConfiguredAdminEmail(): string {
   const configured = process.env.ADMIN_EMAIL?.trim();
   const email = configured && configured.length > 0 ? configured : DEMO_ADMIN_EMAIL;
   return email.toLowerCase();

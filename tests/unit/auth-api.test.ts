@@ -1016,26 +1016,145 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       const token = await signSessionToken(user, 4 * 60 * 60);
       const verified = await verifySessionToken(token);
       expect(verified?.exp).toBeTruthy();
-      const longLived = await signSessionToken(user, 48 * 60 * 60);
-      const longVerified = await verifySessionToken(longLived);
-      expect(longVerified).not.toBeNull();
       expect(SESSION_MAX_AGE_SECONDS).toBe(60 * 60 * 24);
 
-      const cookie = `${SESSION_COOKIE_NAME}=${longLived}`;
-      const res = await logoutRoute.POST(
-        new Request('http://localhost:3000/api/auth/logout', {
-          method: 'POST',
-          headers: { cookie },
-        })
-      );
-      expect(res.status).toBe(200);
-      expect(await verifySessionToken(longLived)).toBeNull();
-      clearRevokedSessionTokens();
+      // Controlled clock: a 48h token revoked now stays rejected deep into the
+      // 24–48h band where a fixed-24h revocation would have lapsed — while an
+      // unrevoked control token from the same signed moment stays valid.
+      const realNow = Date.now;
+      try {
+        const t0 = 1_700_000_000_000; // whole second
+        Date.now = () => t0;
+        clearRevokedSessionTokens();
+        const longLived = await signSessionToken(user, 48 * 60 * 60);
+        const control = await signSessionToken(user, 48 * 60 * 60);
+        expect(await verifySessionToken(longLived)).not.toBeNull();
+
+        const cookie = `${SESSION_COOKIE_NAME}=${longLived}`;
+        const res = await logoutRoute.POST(
+          new Request('http://localhost:3000/api/auth/logout', {
+            method: 'POST',
+            headers: { cookie },
+          })
+        );
+        expect(res.status).toBe(200);
+        expect(await verifySessionToken(longLived)).toBeNull();
+
+        // 24h later (past the standard 86400s window): revoked still dead…
+        Date.now = () => t0 + 24 * 60 * 60 * 1000 + 5000;
+        expect(await verifySessionToken(longLived)).toBeNull();
+        // …and the never-revoked control is still valid.
+        expect(await verifySessionToken(control)).not.toBeNull();
+
+        // 48h window nearly exhausted: revocation still holds up to its exp.
+        Date.now = () => t0 + 47 * 60 * 60 * 1000;
+        expect(await verifySessionToken(longLived)).toBeNull();
+        // Just past the 48h exp the token is naturally expired and the
+        // revocation entry is gone.
+        Date.now = () => t0 + 48 * 60 * 60 * 1000 + 5000;
+        expect(await verifySessionToken(longLived)).toBeNull();
+        expect(await verifySessionToken(control)).toBeNull();
+
+        // A genuinely fractional TTL: the signed exp claim keeps the fraction
+        // (2.5s must not round up), and the revoked token stays rejected
+        // exactly through its whole-second boundary while an unrevoked
+        // control with the same TTL verifies.
+        Date.now = () => 1_800_000_000_500;
+        const fracToken = await signSessionToken(user, 2.5);
+        const fracVerified = await verifySessionToken(fracToken);
+        expect(fracVerified?.exp).toBe(1_800_000_002.5);
+        const fracControl = await signSessionToken(user, 2.5);
+        await logoutRoute.POST(
+          new Request('http://localhost:3000/api/auth/logout', {
+            method: 'POST',
+            headers: { cookie: `${SESSION_COOKIE_NAME}=${fracToken}` },
+          })
+        );
+        expect(await verifySessionToken(fracToken)).toBeNull();
+        // Revoked through its own fractional exp (…002.5s): still dead at
+        // now = floor(exp) while the unrevoked control is still alive there.
+        Date.now = () => 1_800_000_002_000;
+        expect(await verifySessionToken(fracToken)).toBeNull();
+        expect(await verifySessionToken(fracControl)).not.toBeNull();
+        Date.now = () => 1_800_000_002_499;
+        expect(await verifySessionToken(fracToken)).toBeNull();
+        // Past the fractional exp both are naturally expired.
+        Date.now = () => 1_800_000_003_000;
+        expect(await verifySessionToken(fracToken)).toBeNull();
+        expect(await verifySessionToken(fracControl)).toBeNull();
+      } finally {
+        Date.now = realNow;
+        clearRevokedSessionTokens();
+      }
+    });
+
+    test('credential stamp shares seeding identity rule: blank/omitted/default ADMIN_EMAIL equivalent, real changes invalidate', async () => {
+      const mutableEnv = process.env as Record<string, string | undefined>;
+      const prevAuthSecret = process.env.AUTH_SECRET;
+      const prevAdminEmail = process.env.ADMIN_EMAIL;
+      const prevAdminPassword = process.env.ADMIN_PASSWORD;
+      process.env.AUTH_SECRET = 'stamp-identity-rule-secret';
+      process.env.ADMIN_PASSWORD = 'stamp-identity-password';
+      const adminUser = { id: 1, email: 'admin@grovia.io', name: 'Alex Rivera', role: 'admin' };
+      const prevNodeEnv = mutableEnv.NODE_ENV;
+      mutableEnv.NODE_ENV = 'production';
+      try {
+        delete process.env.ADMIN_EMAIL;
+        const omitted = await signSessionToken(adminUser);
+        const omittedVerified = await verifySessionToken(omitted);
+        expect(omittedVerified).not.toBeNull();
+
+        // Blank / padded / default are the same normalized identity: a token
+        // signed under any one of them verifies under all of them.
+        process.env.ADMIN_EMAIL = '   ';
+        expect(await verifySessionToken(omitted)).not.toBeNull();
+        process.env.ADMIN_EMAIL = ' ADMIN@GROVIA.IO ';
+        expect(await verifySessionToken(omitted)).not.toBeNull();
+        // Whitespace-padded ADMIN_PASSWORD normalizes to the same stamp.
+        process.env.ADMIN_PASSWORD = '  stamp-identity-password  ';
+        expect(await verifySessionToken(omitted)).not.toBeNull();
+        process.env.ADMIN_PASSWORD = 'stamp-identity-password';
+        process.env.ADMIN_EMAIL = 'admin@grovia.io';
+        expect(await verifySessionToken(omitted)).not.toBeNull();
+
+        // A genuinely different configured identity changes the stamp: the
+        // token from the old credential config no longer verifies for admin…
+        process.env.ADMIN_EMAIL = 'other-admin@grovia.io';
+        expect(await verifySessionToken(omitted)).toBeNull();
+        const reissued = await signSessionToken(adminUser);
+        expect(await verifySessionToken(reissued)).not.toBeNull();
+        // …and changing ADMIN_PASSWORD invalidates it in the other direction.
+        process.env.ADMIN_PASSWORD = 'rotated-stamp-password';
+        expect(await verifySessionToken(reissued)).toBeNull();
+
+        // Members are never credential-gated.
+        process.env.ADMIN_EMAIL = '   ';
+        process.env.ADMIN_PASSWORD = 'stamp-identity-password';
+        const memberTok = await signSessionToken({
+          id: 2,
+          email: 'member@grovia.io',
+          name: 'Member',
+          role: 'member',
+        });
+        process.env.ADMIN_PASSWORD = 'something-else';
+        expect(await verifySessionToken(memberTok)).not.toBeNull();
+      } finally {
+        if (prevNodeEnv !== undefined) mutableEnv.NODE_ENV = prevNodeEnv;
+        else delete mutableEnv.NODE_ENV;
+        if (prevAuthSecret !== undefined) process.env.AUTH_SECRET = prevAuthSecret;
+        else delete process.env.AUTH_SECRET;
+        if (prevAdminEmail !== undefined) process.env.ADMIN_EMAIL = prevAdminEmail;
+        else delete process.env.ADMIN_EMAIL;
+        if (prevAdminPassword !== undefined) process.env.ADMIN_PASSWORD = prevAdminPassword;
+        else delete process.env.ADMIN_PASSWORD;
+        clearRevokedSessionTokens();
+      }
     });
 
     test('credential-version token verification rejects legacy admin tokens and accepts directly signed private admin and member tokens', async () => {
       // Fixed secret for the whole test: signing-key changes must not be the
       // reason a token is rejected — only the credential version is.
+      const mutableEnv = process.env as Record<string, string | undefined>;
       const prevAuthSecret = process.env.AUTH_SECRET;
       process.env.AUTH_SECRET = 'cred-version-gating-test-secret';
       try {
@@ -1051,14 +1170,14 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
         // Private-mode production: a demo-era (claim-less) admin token must not
         // grant admin access even when the signing secret is unchanged...
         const prev = {
-          NODE_ENV: process.env.NODE_ENV,
+          NODE_ENV: mutableEnv.NODE_ENV,
           ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
         };
-        process.env.NODE_ENV = 'production';
+        mutableEnv.NODE_ENV = 'production';
         process.env.ADMIN_PASSWORD = 'production-private-pass';
         try {
           expect(await verifySessionToken(legacy)).toBeNull();
-          // ...while a fresh sign-in under the private credential verifies.
+          // ...while an admin token signed under the private credential verifies.
           const fresh = await signSessionToken(user);
           const freshParsed = await verifySessionToken(fresh);
           expect(freshParsed).not.toBeNull();
@@ -1067,13 +1186,50 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
           const memberTok = await signSessionToken(member);
           expect(await verifySessionToken(memberTok)).not.toBeNull();
         } finally {
-          if (prev.NODE_ENV !== undefined) process.env.NODE_ENV = prev.NODE_ENV;
+          if (prev.NODE_ENV !== undefined) mutableEnv.NODE_ENV = prev.NODE_ENV;
+          else delete mutableEnv.NODE_ENV;
           if (prev.ADMIN_PASSWORD !== undefined) process.env.ADMIN_PASSWORD = prev.ADMIN_PASSWORD;
           else delete process.env.ADMIN_PASSWORD;
         }
       } finally {
         if (prevAuthSecret !== undefined) process.env.AUTH_SECRET = prevAuthSecret;
         else delete process.env.AUTH_SECRET;
+      }
+    });
+
+    test('configured admin email pre-claimed by a member row: collision rejected, row never promoted (SQLite)', async () => {
+      await resetDatabase(tempDbPath);
+      const db = getDb(tempDbPath);
+      db.run(`DELETE FROM users WHERE email = 'member-admin@grovia.io'`);
+      db.run(
+        `INSERT INTO users (email, name, role, password_hash) VALUES ('member-admin@grovia.io', 'Planted Member', 'member', 'stored-member-hash')`
+      );
+
+      const prevAdminEmail = process.env.ADMIN_EMAIL;
+      const prevAdminPassword = process.env.ADMIN_PASSWORD;
+      try {
+        process.env.ADMIN_EMAIL = 'member-admin@grovia.io';
+        process.env.ADMIN_PASSWORD = 'new-private-password';
+        expect(() => initDatabase(tempDbPath)).toThrow(
+          /Refusing admin seeding: non-admin user already exists/
+        );
+
+        // The refused init leaves the module cold (no cached handle/snapshot
+        // rows); with ambient config restored, re-opening succeeds and shows
+        // the planted row untouched — never promoted, never re-hashed.
+        delete process.env.ADMIN_EMAIL;
+        delete process.env.ADMIN_PASSWORD;
+        initDatabase(tempDbPath);
+        const row = findUserByEmail('member-admin@grovia.io');
+        expect(row?.role).toBe('member');
+        expect(row?.password_hash).toBe('stored-member-hash');
+        expect(findUserByEmail('admin@grovia.io')?.role).toBe('admin');
+      } finally {
+        if (prevAdminEmail !== undefined) process.env.ADMIN_EMAIL = prevAdminEmail;
+        else delete process.env.ADMIN_EMAIL;
+        if (prevAdminPassword !== undefined) process.env.ADMIN_PASSWORD = prevAdminPassword;
+        else delete process.env.ADMIN_PASSWORD;
+        await resetDatabase(tempDbPath);
       }
     });
 

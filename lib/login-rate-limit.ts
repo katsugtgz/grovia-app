@@ -79,10 +79,14 @@ function isBucketRateLimited(
   return { limited: false, retryAfterSec: 0 };
 }
 
-function evictLowestCountBucket(store: Map<string, FailedLoginBucket>): void {
+function evictLowestCountBucket(
+  store: Map<string, FailedLoginBucket>,
+  protectedKeys: ReadonlySet<string>
+): void {
   let victimKey: string | undefined;
   let lowestCount = Number.POSITIVE_INFINITY;
   for (const [k, v] of store.entries()) {
+    if (protectedKeys.has(k)) continue;
     if (v.count < lowestCount) {
       lowestCount = v.count;
       victimKey = k;
@@ -96,7 +100,12 @@ function evictLowestCountBucket(store: Map<string, FailedLoginBucket>): void {
   }
 }
 
-function incrementBucket(key: string, now: number, maxBuckets: number): void {
+function incrementBucket(
+  key: string,
+  now: number,
+  maxBuckets: number,
+  protectedKeys: ReadonlySet<string>
+): void {
   const store = getLoginAttemptStore();
   if (store.size > 500 || store.size >= maxBuckets) {
     for (const [k, v] of store.entries()) {
@@ -104,7 +113,7 @@ function incrementBucket(key: string, now: number, maxBuckets: number): void {
     }
   }
   if (!store.has(key) && store.size >= maxBuckets) {
-    evictLowestCountBucket(store);
+    evictLowestCountBucket(store, protectedKeys);
   }
   const existing = store.get(key);
   if (!existing || now >= existing.resetAt) {
@@ -135,12 +144,16 @@ export function reserveLoginAttempt(
   now: number = Date.now(),
   maxBuckets: number = MAX_LOGIN_ATTEMPT_BUCKETS
 ): { limited: boolean; retryAfterSec: number } {
+  const emailKey = `email:${email}`;
+  const ipKey = clientIp ? `ip:${clientIp}` : null;
+  const pairKey = clientIp ? `pair:${clientIp}:${email}` : null;
+
   const checks = [
-    isBucketRateLimited(`email:${email}`, MAX_FAILED_LOGIN_ATTEMPTS, now),
-    ...(clientIp
+    isBucketRateLimited(emailKey, MAX_FAILED_LOGIN_ATTEMPTS, now),
+    ...(ipKey && pairKey
       ? [
-          isBucketRateLimited(`ip:${clientIp}`, MAX_FAILED_IP_ATTEMPTS, now),
-          isBucketRateLimited(`pair:${clientIp}:${email}`, MAX_FAILED_LOGIN_ATTEMPTS, now),
+          isBucketRateLimited(ipKey, MAX_FAILED_IP_ATTEMPTS, now),
+          isBucketRateLimited(pairKey, MAX_FAILED_LOGIN_ATTEMPTS, now),
         ]
       : []),
   ];
@@ -155,10 +168,16 @@ export function reserveLoginAttempt(
     return { limited: true, retryAfterSec: maxRetry };
   }
 
-  incrementBucket(`email:${email}`, now, maxBuckets);
-  if (clientIp) {
-    incrementBucket(`ip:${clientIp}`, now, maxBuckets);
-    incrementBucket(`pair:${clientIp}:${email}`, now, maxBuckets);
+  const protectedKeys = new Set<string>([
+    emailKey,
+    ...(ipKey ? [ipKey] : []),
+    ...(pairKey ? [pairKey] : []),
+  ]);
+
+  incrementBucket(emailKey, now, maxBuckets, protectedKeys);
+  if (ipKey && pairKey) {
+    incrementBucket(ipKey, now, maxBuckets, protectedKeys);
+    incrementBucket(pairKey, now, maxBuckets, protectedKeys);
   }
   return { limited: false, retryAfterSec: 0 };
 }
@@ -173,5 +192,17 @@ export function releaseLoginAttempt(clientIp: string | null, email: string): voi
   if (clientIp) {
     store.delete(`pair:${clientIp}:${email}`);
     decrementBucket(`ip:${clientIp}`);
+  }
+}
+
+/**
+ * Rolls back a single reserved attempt when an internal error occurs before credentials
+ * can be verified, avoiding outage-induced lockouts without clearing prior failed attempts.
+ */
+export function rollbackLoginAttemptReservation(clientIp: string | null, email: string): void {
+  decrementBucket(`email:${email}`);
+  if (clientIp) {
+    decrementBucket(`ip:${clientIp}`);
+    decrementBucket(`pair:${clientIp}:${email}`);
   }
 }

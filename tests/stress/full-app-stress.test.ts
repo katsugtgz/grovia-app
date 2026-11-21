@@ -11,6 +11,7 @@ import {
   verifySessionToken,
 } from '@/lib/auth-edge';
 import { closeDb, initDatabase } from '@/lib/db';
+import { MAX_FAILED_LOGIN_ATTEMPTS } from '@/lib/login-rate-limit';
 import { middleware } from '@/middleware';
 import { createTestClient, resetDatabase, type TestClient } from '../e2e/harness/test-client';
 
@@ -125,11 +126,13 @@ describe('Full-App Stress, Concurrency, Race Deduplication & Security Fuzzing Su
 
   describe('1. High-Concurrency Burst Requests Across All Routes & APIs', () => {
     test('Auth burst: concurrent POST /api/auth/login, GET /api/auth/session, and POST /api/auth/logout', async () => {
-      const waveSize = 10;
+      const waveSize = MAX_FAILED_LOGIN_ATTEMPTS;
       const waves = 2;
       const latencies: number[] = [];
 
-      // Two concurrent waves of 10 (each wave within the 10-attempt per-email brute-force guard)
+      // Intentionally split into two waves of MAX_FAILED_LOGIN_ATTEMPTS (halving peak
+      // single-account concurrency) to stay within the synchronous in-flight per-email limiter
+      // cap; wave 2 stays under the limit because wave 1's successful logins clear the email bucket.
       const loginOutcomes: Array<{
         result: { client: TestClient; res: Awaited<ReturnType<TestClient['login']>>; isValid: boolean };
         durationMs: number;

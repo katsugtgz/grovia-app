@@ -6,6 +6,7 @@ import {
   extractClientIp,
   releaseLoginAttempt,
   reserveLoginAttempt,
+  rollbackLoginAttemptReservation,
 } from '@/lib/login-rate-limit';
 import { hashPassword, verifyPasswordAsync } from '@/lib/password';
 import type { AuthUser } from '@/lib/types';
@@ -57,6 +58,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  let reservationReleased = false;
   try {
     const user = findUserByEmail(parsed.data.email);
     const targetHash = user ? user.password_hash : DUMMY_PASSWORD_HASH;
@@ -76,6 +78,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     releaseLoginAttempt(clientIp, parsed.data.email);
+    reservationReleased = true;
 
     const sessionUser: AuthUser = {
       id: user.id,
@@ -98,6 +101,9 @@ export async function POST(request: Request): Promise<Response> {
 
     return setSessionCookie(response, token, request);
   } catch (err: unknown) {
+    if (!reservationReleased) {
+      rollbackLoginAttemptReservation(clientIp, parsed.data.email);
+    }
     console.error('[api/auth/login] POST failed:', err);
     return NextResponse.json(
       { success: false, error: 'Authentication failed' },

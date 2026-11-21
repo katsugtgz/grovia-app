@@ -52,11 +52,6 @@ export function revokeSessionToken(token: string | null | undefined): void {
   getRevokedTokensMap().set(token, nowSec + SESSION_MAX_AGE_SECONDS);
 }
 
-export function unrevokeSessionToken(token: string | null | undefined): void {
-  if (!token || typeof token !== 'string') return;
-  getRevokedTokensMap().delete(token);
-}
-
 export function clearRevokedSessionTokens(): void {
   getRevokedTokensMap().clear();
 }

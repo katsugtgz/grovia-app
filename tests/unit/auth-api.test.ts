@@ -12,6 +12,7 @@ import {
   releaseLoginAttempt,
   reserveLoginAttempt,
   resetLoginAttemptTracker,
+  rollbackLoginAttemptReservation,
 } from '@/lib/login-rate-limit';
 import {
   SESSION_COOKIE_NAME,
@@ -801,6 +802,29 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       }
       expect(getLoginAttemptBucketCount()).toBeLessThanOrEqual(5);
       expect(reserveLoginAttempt(null, 'locked@grovia.io', t0, 5).limited).toBe(true);
+
+      // Capacity eviction protects current reservation's keys (email/ip/pair) from self-eviction
+      // even when rotating IPs against a tiny bucket table
+      resetLoginAttemptTracker();
+      for (let i = 0; i < MAX_FAILED_LOGIN_ATTEMPTS; i += 1) {
+        expect(
+          reserveLoginAttempt(`198.51.100.${i + 1}`, 'rotating-target@grovia.io', t0, 3).limited
+        ).toBe(false);
+      }
+      expect(
+        reserveLoginAttempt('198.51.100.99', 'rotating-target@grovia.io', t0, 3).limited
+      ).toBe(true);
+
+      // Rollback decrements only the single reserved attempt without wiping prior failures
+      resetLoginAttemptTracker();
+      for (let i = 0; i < MAX_FAILED_LOGIN_ATTEMPTS - 1; i += 1) {
+        expect(reserveLoginAttempt('10.0.0.2', 'outage@grovia.io', t0).limited).toBe(false);
+      }
+      expect(reserveLoginAttempt('10.0.0.2', 'outage@grovia.io', t0).limited).toBe(false);
+      rollbackLoginAttemptReservation('10.0.0.2', 'outage@grovia.io');
+      // Still 9 prior failures recorded -> 1 more attempt succeeds, next attempt is limited
+      expect(reserveLoginAttempt('10.0.0.2', 'outage@grovia.io', t0).limited).toBe(false);
+      expect(reserveLoginAttempt('10.0.0.2', 'outage@grovia.io', t0).limited).toBe(true);
       resetLoginAttemptTracker();
     });
 

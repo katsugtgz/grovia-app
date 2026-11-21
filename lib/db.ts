@@ -82,12 +82,20 @@ declare global {
 }
 
 function getDummyStoreSnapshotPath(): string | null {
-  const rawPath =
-    globalThis.__grovia_db_path__ ||
-    process.env.DB_PATH ||
-    process.env.DATABASE_PATH ||
-    process.env.DATABASE_URL ||
-    getDatabasePath();
+  const explicitEnvPath =
+    process.env.DB_PATH || process.env.DATABASE_PATH || process.env.DATABASE_URL;
+  const activePath = globalThis.__grovia_db_path__;
+  const defaultDbPath = path.resolve(process.cwd(), 'grovia.db');
+
+  if (
+    process.env.NODE_ENV === 'test' &&
+    !explicitEnvPath &&
+    (!activePath || path.resolve(activePath) === defaultDbPath)
+  ) {
+    return null;
+  }
+
+  const rawPath = activePath || explicitEnvPath || getDatabasePath();
   const trimmed = rawPath.trim();
   if (!trimmed || trimmed === ':memory:') return null;
   const normalized = trimmed.startsWith('file:') ? trimmed.slice(5) : trimmed;

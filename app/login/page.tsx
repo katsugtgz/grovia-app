@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getServerSession } from '@/lib/auth';
+import { showsDefaultDemoCredentials } from '@/lib/db';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { resolveLoginPageState } from '@/components/auth/login-helpers';
 
@@ -26,5 +27,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     redirect(nextPath);
   }
 
-  return <LoginForm nextPath={nextPath} />;
+  return (
+    <LoginForm
+      nextPath={nextPath}
+      showDemoCredentials={showsDefaultDemoCredentials()}
+    />
+  );
 }

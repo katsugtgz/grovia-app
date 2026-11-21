@@ -285,7 +285,10 @@ describe('Unit — M2 Landing Page, Login Page & PII Isolation', () => {
   describe('LoginForm SSR, Validation & Submit Helper', () => {
     test('renders accessible email/password inputs, back link to /, submit button, demo credentials, and no <main>', () => {
       const html = renderToStaticMarkup(
-        React.createElement(LoginForm, { nextPath: '/workspace?tab=people' })
+        React.createElement(LoginForm, {
+          nextPath: '/workspace?tab=people',
+          showDemoCredentials: true,
+        })
       );
 
       expect(html).toContain('<header');
@@ -305,6 +308,16 @@ describe('Unit — M2 Landing Page, Login Page & PII Isolation', () => {
       expect(html).toContain(DEMO_ADMIN_PASS);
       expect(html).not.toContain('<main');
       expect(html).not.toContain('@example.invalid');
+    });
+
+    test('omits demo credentials unless the server-derived flag is set', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(LoginForm, { nextPath: '/workspace' })
+      );
+
+      expect(html).not.toContain('Use demo account');
+      expect(html).not.toContain(DEMO_ADMIN_PASS);
+      expect(html).toContain('type="password"');
     });
 
     test('validateLoginInput & submitLoginRequest handle 200, 401, 400, and network error', async () => {
@@ -411,7 +424,6 @@ describe('Unit — M2 Landing Page, Login Page & PII Isolation', () => {
       const html = renderToStaticMarkup(element);
 
       expect(html).toContain('Sign in to Grovia');
-      expect(html).toContain('admin@grovia.io');
       expect(html).toContain('type="email"');
       expect(html).toContain('type="password"');
       expect(html).not.toContain('<main');

@@ -16,10 +16,21 @@ import {
 
 export interface LoginFormProps {
   nextPath?: string;
+  /**
+   * Server-computed via `showsDefaultDemoCredentials()`: render the demo block
+   * only when the well-known demo account is what is actually seeded here
+   * (demo admin allowed AND no ADMIN_EMAIL/ADMIN_PASSWORD overrides). Never
+   * expose real configured credentials through this prop.
+   */
+  showDemoCredentials?: boolean;
   onSuccess?: (redirectTo: string) => void;
 }
 
-export function LoginForm({ nextPath, onSuccess }: LoginFormProps) {
+export function LoginForm({
+  nextPath,
+  showDemoCredentials = false,
+  onSuccess,
+}: LoginFormProps) {
   const cardRef = useRef<HTMLElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
@@ -62,6 +73,7 @@ export function LoginForm({ nextPath, onSuccess }: LoginFormProps) {
   };
 
   const handleUseDemo = () => {
+    if (!showDemoCredentials) return;
     setEmail(DEMO_ADMIN_EMAIL);
     setPassword(DEMO_ADMIN_PASS);
     setFieldErrors({});
@@ -216,22 +228,24 @@ export function LoginForm({ nextPath, onSuccess }: LoginFormProps) {
             </button>
           </form>
 
-          <div className="auth-demo">
-            <div className="auth-demo__row">
-              <span className="auth-demo__label">Demo workspace account</span>
-              <button type="button" className="pill-btn" onClick={handleUseDemo}>
-                Use demo account
-              </button>
-            </div>
-            <div className="auth-demo__creds">
-              <div>
-                Email: <code className="auth-demo__code">{DEMO_ADMIN_EMAIL}</code>
+          {showDemoCredentials ? (
+            <div className="auth-demo">
+              <div className="auth-demo__row">
+                <span className="auth-demo__label">Demo workspace account</span>
+                <button type="button" className="pill-btn" onClick={handleUseDemo}>
+                  Use demo account
+                </button>
               </div>
-              <div>
-                Password: <code className="auth-demo__code">{DEMO_ADMIN_PASS}</code>
+              <div className="auth-demo__creds">
+                <div>
+                  Email: <code className="auth-demo__code">{DEMO_ADMIN_EMAIL}</code>
+                </div>
+                <div>
+                  Password: <code className="auth-demo__code">{DEMO_ADMIN_PASS}</code>
+                </div>
               </div>
             </div>
-          </div>
+          ) : null}
         </article>
       </div>
     </section>

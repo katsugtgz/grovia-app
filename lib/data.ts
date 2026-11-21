@@ -10,3 +10,9 @@ export const AVATAR_PALETTE = [
   '#e4d3ea',
   '#d6e2dc',
 ];
+
+/**
+ * Fallback avatar background used when a person record has no color. Keep in
+ * sync with the DB column default in `lib/db.ts` — both must reference this.
+ */
+export const DEFAULT_AVATAR_COLOR = '#cfe0c8';

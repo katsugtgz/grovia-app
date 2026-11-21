@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { $ } from '@/lib/motion';
 import type { Person } from '@/lib/types';
+import { DEFAULT_AVATAR_COLOR } from '@/lib/data';
 import { Icon } from './Icon';
 import { no } from '@/lib/template-core';
 
@@ -143,7 +144,7 @@ export function NotificationTray({
         {NOTIFICATION_ITEMS.map(({ personId, fallbackId, fallbackName, action, time }) => {
           const person = people.find((p) => p.id === personId);
           const itemKey = person?.id ?? fallbackId;
-          const av = person?.av ?? '#cfe0c8';
+          const av = person?.av ?? DEFAULT_AVATAR_COLOR;
           const name = person?.name ?? fallbackName;
 
           return (

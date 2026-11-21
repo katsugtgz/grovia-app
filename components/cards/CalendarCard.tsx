@@ -6,6 +6,7 @@ import { $, isReducedMotion } from '@/lib/motion';
 import { Icon } from '@/components/ui/Icon';
 import { triggerToast } from '@/lib/toast';
 import { no } from '@/lib/template-core';
+import { DEFAULT_AVATAR_COLOR } from '@/lib/data';
 import type { Person } from '@/lib/types';
 
 export interface CalendarCardProps {
@@ -327,7 +328,7 @@ export function CalendarCard({ people = EMPTY_PEOPLE }: CalendarCardProps) {
             <span className="avatars">
               {ev.who.map((personId) => {
                 const person = people.find((p) => p.id === personId);
-                const av = person?.av ?? '#cfe0c8';
+                const av = person?.av ?? DEFAULT_AVATAR_COLOR;
                 return (
                   <span
                     key={`ev-av-${ev.id}-${personId}`}

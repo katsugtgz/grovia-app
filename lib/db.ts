@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { hashPassword } from './password';
 import { SEED_PEOPLE } from './seed-people';
 import { AVATAR_BG_COLORS, getAppearanceForSeed } from './template-core';
+import { DEFAULT_AVATAR_COLOR } from './data';
 import type { AppearanceConfig, AuthUser, Person } from './types';
 
 const req = createRequire(import.meta.url);
@@ -387,7 +388,7 @@ function getDatabaseConstructor(): typeof Database {
                   hire_date: String(params[5] ?? ''),
                   since: String(params[6] ?? 'Invited today'),
                   status: String(params[7] ?? 'Invited'),
-                  av: String(params[8] ?? '#cfe0c8'),
+                  av: String(params[8] ?? DEFAULT_AVATAR_COLOR),
                   rate: Number(params[9] ?? 40),
                   email,
                   phone: params[11] != null ? String(params[11]) : 'Not provided',
@@ -665,7 +666,7 @@ export function initSchema(database: Database): void {
       hire_date TEXT NOT NULL,
       since TEXT NOT NULL DEFAULT 'Invited today',
       status TEXT NOT NULL DEFAULT 'Invited',
-      av TEXT NOT NULL DEFAULT '#cfe0c8',
+      av TEXT NOT NULL DEFAULT '${DEFAULT_AVATAR_COLOR}',
       rate REAL NOT NULL DEFAULT 40,
       email TEXT NOT NULL UNIQUE COLLATE NOCASE,
       phone TEXT DEFAULT 'Not provided',
@@ -776,7 +777,7 @@ export function ensureAuthAndPeopleSeeded(database: Database): void {
       person.hireDate,
       person.since || 'Sample date',
       person.status,
-      person.av || '#cfe0c8',
+      person.av || DEFAULT_AVATAR_COLOR,
       person.rate ?? 40,
       (person.email || `person${person.id}@example.invalid`).toLowerCase(),
       person.phone || 'Not provided',
@@ -1154,7 +1155,7 @@ function mapPersonRow(row: PersonDbRow): Person {
     hireDate: row.hire_date,
     since: row.since || 'Sample date',
     status: row.status,
-    av: row.av || '#cfe0c8',
+    av: row.av || DEFAULT_AVATAR_COLOR,
     rate: typeof row.rate === 'number' ? row.rate : Number(row.rate ?? 40),
     email: row.email,
     phone: row.phone || 'Not provided',
@@ -1209,7 +1210,7 @@ export function createPerson(data: CreatePersonInput): {
   const since = 'Invited today';
   const status = 'Invited';
   const nameHash = [...cleanName].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 7);
-  const av = AVATAR_BG_COLORS[nameHash % AVATAR_BG_COLORS.length] || '#cfe0c8';
+  const av = AVATAR_BG_COLORS[nameHash % AVATAR_BG_COLORS.length] || DEFAULT_AVATAR_COLOR;
   const look = getAppearanceForSeed(cleanName);
 
   try {

@@ -1,24 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { createRandomEmail, fixtures } from '../../harness/fixtures';
 import { startLiveServer, type LiveServerHandle } from '../../harness/live-http';
+import { assertNoSeedPeoplePii } from '../../harness/pii';
 
 interface WaitlistPostResponse {
   success: boolean;
   message: string;
   position: number;
 }
-
-const INITIAL_PEOPLE_NAMES = Array.from(
-  { length: 10 },
-  (_, index) => `Demo Person ${String(index + 1).padStart(2, '0')}`
-);
-
-const INITIAL_PEOPLE_EMAILS = Array.from(
-  { length: 10 },
-  (_, index) => `person${String(index + 1).padStart(2, '0')}@example.invalid`
-);
-
-const INITIAL_RATES = [38, 42, 45, 44, 47, 39, 40, 36, 43, 41];
 
 function extractStaticScriptPaths(html: string): string[] {
   const paths = new Set<string>();
@@ -122,28 +111,20 @@ describe('Tier 1 — F1: Public Landing Page (/) & PII Exclusion', () => {
   });
 
   test(
-    'T1.v2.1.5: GET / HTML contains zero INITIAL_PEOPLE names, .invalid emails, or hourly rate markers',
+    'T1.v2.1.5: GET / HTML contains no seeded employee PII or hourly rates',
     async () => {
       const client = getServer().createClient();
       const res = await client.get<string>('/');
 
       expect(res.status).toBe(200);
 
-      for (const name of INITIAL_PEOPLE_NAMES) {
-        expect(res.text).not.toContain(name);
-      }
-      for (const email of INITIAL_PEOPLE_EMAILS) {
-        expect(res.text).not.toContain(email);
-      }
-      for (const rate of INITIAL_RATES) {
-        expect(res.text).not.toContain(`"rate":${rate}`);
-      }
+      assertNoSeedPeoplePii(res.text);
     },
     { timeout: 15_000 }
   );
 
   test(
-    'T1.v2.1.6: Public /_next/static JS chunks referenced by GET / contain zero INITIAL_PEOPLE PII or payroll rates',
+    'T1.v2.1.6: Public /_next/static JS chunks referenced by GET / contain no seeded employee PII or hourly rates',
     async () => {
       const client = getServer().createClient();
       const htmlRes = await client.get<string>('/');
@@ -162,16 +143,8 @@ describe('Tier 1 — F1: Public Landing Page (/) & PII Exclusion', () => {
       for (const { assetRes } of chunkResponses) {
         expect(assetRes.status).toBe(200);
 
-        for (const name of INITIAL_PEOPLE_NAMES) {
-          expect(assetRes.text).not.toContain(name);
-        }
-        for (const email of INITIAL_PEOPLE_EMAILS) {
-          expect(assetRes.text).not.toContain(email);
-        }
+        assertNoSeedPeoplePii(assetRes.text);
         expect(assetRes.text).not.toContain('@example.invalid');
-        for (const rate of INITIAL_RATES) {
-          expect(assetRes.text).not.toContain(`"rate":${rate}`);
-        }
       }
     },
     { timeout: 15_000 }

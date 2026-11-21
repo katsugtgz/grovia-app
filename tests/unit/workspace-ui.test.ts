@@ -109,8 +109,7 @@ describe('Unit — M3 Workspace Migration, Public Landing Mount, PII Decoupling 
 
       expect(state.redirectTo).toBeNull();
       expect(state.user).toEqual(DEMO_USER);
-      expect(state.people.length).toBe(10);
-      expect(state.people[0]?.name).toBe('Demo Person 01');
+      expect(state.people).toEqual(SAMPLE_PEOPLE);
     });
 
     test('WorkspaceShell renders full Bento workspace views, people roster, and user profile menu', () => {

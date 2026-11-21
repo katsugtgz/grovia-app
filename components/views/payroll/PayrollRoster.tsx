@@ -6,17 +6,15 @@ import { no } from '@/lib/template-core';
 
 export interface PayrollRosterProps {
   people: Person[];
-  rosterIndices: number[];
-  selectedRosterIdx: number;
-  onSelectRosterIdx: (idx: number) => void;
+  selectedPersonId: string;
+  onSelectPerson: (id: string) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
 }
 
 export function PayrollRoster({
   people,
-  rosterIndices,
-  selectedRosterIdx,
-  onSelectRosterIdx,
+  selectedPersonId,
+  onSelectPerson,
   onKeyDown,
 }: PayrollRosterProps) {
   return (
@@ -30,10 +28,8 @@ export function PayrollRoster({
         tabIndex={0}
         onKeyDown={onKeyDown}
       >
-        {rosterIndices.map((idx, rIdx) => {
-          const person = people[idx];
-          if (!person) return null;
-          const isSelected = selectedRosterIdx === rIdx;
+        {people.map((person) => {
+          const isSelected = selectedPersonId === person.id;
 
           return (
             <li key={person.id}>
@@ -41,9 +37,9 @@ export function PayrollRoster({
                 className={`roster__item ${isSelected ? 'is-sel' : ''}`}
                 type="button"
                 role="option"
-                data-i={idx}
+                data-i={person.id}
                 aria-selected={isSelected}
-                onClick={() => onSelectRosterIdx(rIdx)}
+                onClick={() => onSelectPerson(person.id)}
               >
                 <span
                   className="avatar"

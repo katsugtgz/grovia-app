@@ -51,7 +51,18 @@ function calculateTimesheet(personIndex: number): TimesheetDay[] {
   return days;
 }
 
-const ROSTER_INDICES = [0, 1, 2, 3, 5, 6];
+// Preserve the original demo roster and its timesheets regardless of People ordering.
+const DEMO_PAYROLL_IDS = ['0', '1', '2', '3', '5', '6'];
+
+function timesheetSeedIndex(id: string): number {
+  if (DEMO_PAYROLL_IDS.includes(id)) return Number(id);
+
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (Math.imul(31, hash) + id.charCodeAt(i)) >>> 0;
+  }
+  return 7 + hash % 1_000_000;
+}
 
 export function PayrollView({ active, people }: PayrollViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -60,15 +71,16 @@ export function PayrollView({ active, people }: PayrollViewProps) {
   const roleRef = useRef<HTMLParagraphElement>(null);
   const monthGridRef = useRef<HTMLDivElement>(null);
 
-  const [selectedRosterIdx, setSelectedRosterIdx] = useState(0);
-
-  const currentPersonIndex = ROSTER_INDICES[selectedRosterIdx] ?? 0;
-  const currentPerson = people[currentPersonIndex] || people[0];
-
-  const timesheetDays = useMemo(
-    () => calculateTimesheet(currentPersonIndex),
-    [currentPersonIndex]
-  );
+  const demoRoster = DEMO_PAYROLL_IDS.flatMap((id) => {
+    const person = people.find((candidate) => candidate.id === id);
+    return person ? [person] : [];
+  });
+  const roster = demoRoster.length ? demoRoster : people;
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(roster[0]?.id ?? null);
+  const currentPerson = roster.find((person) => person.id === selectedPersonId) ?? roster[0];
+  const currentPersonId = currentPerson?.id;
+  const sampleIndex = currentPersonId === undefined ? 0 : timesheetSeedIndex(currentPersonId);
+  const timesheetDays = useMemo(() => calculateTimesheet(sampleIndex), [sampleIndex]);
 
   const timesheetSummary = useMemo(() => {
     const worked = timesheetDays.reduce((acc, day) => acc + (day.h || 0), 0);
@@ -111,20 +123,19 @@ export function PayrollView({ active, people }: PayrollViewProps) {
         )
       : 0;
 
-  const ptoVal = 18 - (currentPersonIndex % 5) * 2;
-  const learningVal = 1200 - currentPersonIndex * 110;
+  const ptoVal = 18 - (sampleIndex % 5) * 2;
+  const learningVal = 1200 - (sampleIndex % 10) * 110;
   const hoursPlanVal = Math.round(timesheetSummary.worked);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-      e.preventDefault();
-      setSelectedRosterIdx((prev) => (prev + 1) % ROSTER_INDICES.length);
-    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-      e.preventDefault();
-      setSelectedRosterIdx(
-        (prev) => (prev - 1 + ROSTER_INDICES.length) % ROSTER_INDICES.length
-      );
-    }
+    if (!roster.length) return;
+    const direction = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1
+      : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
+    if (!direction) return;
+
+    e.preventDefault();
+    const index = roster.findIndex((person) => person.id === currentPersonId);
+    setSelectedPersonId(roster[(index + direction + roster.length) % roster.length].id);
   };
 
   useEffect(() => {
@@ -162,7 +173,7 @@ export function PayrollView({ active, people }: PayrollViewProps) {
         );
       }
     }
-  }, [active, currentPersonIndex]);
+  }, [active, currentPersonId]);
 
   const handleDownloadDoc = (type: 'contract' | 'payslip') => {
     if (!currentPerson) return;
@@ -198,10 +209,9 @@ export function PayrollView({ active, people }: PayrollViewProps) {
       ) : (
         <div className="payroll">
         <PayrollRoster
-          people={people}
-          rosterIndices={ROSTER_INDICES}
-          selectedRosterIdx={selectedRosterIdx}
-          onSelectRosterIdx={setSelectedRosterIdx}
+          people={roster}
+          selectedPersonId={currentPerson.id}
+          onSelectPerson={setSelectedPersonId}
           onKeyDown={handleKeyDown}
         />
 

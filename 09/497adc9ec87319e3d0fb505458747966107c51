@@ -1,0 +1,18 @@
+lib/admin-mode.ts
+  h_cc1f32aec57e6b 26-37
+lib/auth-edge.ts
+  h_cc1f32aec57e6b 1,71-73,76,131-132
+tests/unit/auth-api.test.ts
+  h_cc1f32aec57e6b 1021-1151,1157,1173,1176,1180,1189-1190,1200-1235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "09497adc9ec87319e3d0fb505458747966107c51",
+  "prompts": {},
+  "humans": {
+    "h_cc1f32aec57e6b": {
+      "author": "Muhammad Naufal Mahdi <053792227@ecampus.ut.ac.id>"
+    }
+  }
+}

@@ -157,65 +157,38 @@ function isBucketRateLimited(
   return { limited: false, retryAfterSec: 0 };
 }
 
-function evictLowestCountBucket(
+/**
+ * Selects up to `needed` eviction victims via repeated linear passes: each
+ * pass takes the lowest-`count` completed bucket in insertion order (first
+ * strictly-lowest wins, early stop at count 1) — the original single-victim
+ * policy, generalized. Pending buckets (other requests' live reservations) are
+ * never victims: deleting one would strand its in-flight hold outside the
+ * table. No whole-map sort or per-pass allocation; callers run this before any
+ * mutation so a shortfall can be rejected without touching the store.
+ */
+function pickLowestCountVictims(
   store: Map<string, FailedLoginBucket>,
-  protectedKeys: ReadonlySet<string>
-): void {
-  let victimKey: string | undefined;
-  let lowestCount = Number.POSITIVE_INFINITY;
-  for (const [k, v] of store.entries()) {
-    if (protectedKeys.has(k)) continue;
-    if (v.count < lowestCount) {
-      lowestCount = v.count;
-      victimKey = k;
-      if (lowestCount <= 1) {
-        break;
+  protectedKeys: ReadonlySet<string>,
+  needed: number
+): string[] {
+  const victims: string[] = [];
+  const taken = new Set<string>(protectedKeys);
+  for (let pass = 0; pass < needed; pass += 1) {
+    let victimKey: string | undefined;
+    let lowestCount = Number.POSITIVE_INFINITY;
+    for (const [k, v] of store.entries()) {
+      if (taken.has(k) || v.pending > 0) continue;
+      if (v.count < lowestCount) {
+        lowestCount = v.count;
+        victimKey = k;
+        if (lowestCount <= 1) break;
       }
     }
+    if (victimKey === undefined) break;
+    victims.push(victimKey);
+    taken.add(victimKey);
   }
-  if (victimKey !== undefined) {
-    store.delete(victimKey);
-  }
-}
-
-function incrementBucket(
-  key: string,
-  now: number,
-  maxBuckets: number,
-  protectedKeys: ReadonlySet<string>
-): number {
-  const store = getLoginAttemptStore();
-  if (store.size > 500 || store.size >= maxBuckets) {
-    for (const [k, v] of store.entries()) {
-      if (now >= v.resetAt) store.delete(k);
-    }
-  }
-  const existing = store.get(key);
-  if (!existing) {
-    if (store.size >= maxBuckets) {
-      evictLowestCountBucket(store, protectedKeys);
-    }
-    const bucket: FailedLoginBucket = {
-      count: 1,
-      resetAt: now + LOGIN_WINDOW_MS,
-      generation: nextBucketGeneration,
-      pending: 1,
-    };
-    nextBucketGeneration += 1;
-    store.set(key, bucket);
-    return bucket.generation;
-  }
-  if (now >= existing.resetAt) {
-    existing.count = 1;
-    existing.resetAt = now + LOGIN_WINDOW_MS;
-    existing.generation = nextBucketGeneration;
-    existing.pending = 1;
-    nextBucketGeneration += 1;
-    return existing.generation;
-  }
-  existing.count += 1;
-  existing.pending += 1;
-  return existing.generation;
+  return victims;
 }
 
 /**
@@ -224,6 +197,12 @@ function incrementBucket(
  * thresholds while scrypt runs. Returns an identity handle: finalization must
  * use the handle-taking `releaseLoginAttempt` /
  * `rollbackLoginAttemptReservation`.
+ *
+ * Capacity is settled once, before any mutation: expired buckets re-create in
+ * place (no size change), each missing bucket needs one slot, and a shortfall
+ * evicts the lowest-count completed buckets (never buckets holding other
+ * requests' pending reservations). When even that cannot fit the request, the
+ * reservation is refused without evicting anything or taking partial holds.
  */
 export function reserveLoginAttempt(
   clientIp: string | null,
@@ -255,27 +234,60 @@ export function reserveLoginAttempt(
     return { limited: true, retryAfterSec: maxRetry };
   }
 
-  const protectedKeys = new Set<string>([
-    emailKey,
-    ...(ipKey ? [ipKey] : []),
-    ...(pairKey ? [pairKey] : []),
-  ]);
+  const store = getLoginAttemptStore();
+  const keys = ipKey && pairKey ? [emailKey, ipKey, pairKey] : [emailKey];
+  const protectedKeys = new Set<string>(keys);
 
-  const emailGeneration = incrementBucket(emailKey, now, maxBuckets, protectedKeys);
-  let ipGeneration: number | null = null;
-  let pairGeneration: number | null = null;
-  if (ipKey && pairKey) {
-    ipGeneration = incrementBucket(ipKey, now, maxBuckets, protectedKeys);
-    pairGeneration = incrementBucket(pairKey, now, maxBuckets, protectedKeys);
+  // Expiry sweep is independent of eviction and stays lazy (hot path skips it
+  // until capacity pressure); dead windows always clear, and a swept-away
+  // requested key becomes a fresh bucket.
+  let missing = keys.filter((key) => !store.has(key));
+  if (store.size + missing.length > maxBuckets) {
+    for (const [k, v] of store.entries()) {
+      if (now >= v.resetAt) store.delete(k);
+    }
+    missing = keys.filter((key) => !store.has(key));
   }
+  const shortfall = store.size + missing.length - maxBuckets;
+  if (shortfall > 0) {
+    const victims = pickLowestCountVictims(store, protectedKeys, shortfall);
+    if (victims.length < shortfall) {
+      return { limited: true, retryAfterSec: 1 };
+    }
+    for (const victim of victims) {
+      store.delete(victim);
+    }
+  }
+
+  // Admission is guaranteed from here: take the holds.
+  const generations: number[] = [];
+  for (const key of keys) {
+    const existing = store.get(key);
+    if (existing) {
+      existing.count += 1;
+      existing.pending += 1;
+      generations.push(existing.generation);
+    } else {
+      const bucket: FailedLoginBucket = {
+        count: 1,
+        resetAt: now + LOGIN_WINDOW_MS,
+        generation: nextBucketGeneration,
+        pending: 1,
+      };
+      nextBucketGeneration += 1;
+      store.set(key, bucket);
+      generations.push(bucket.generation);
+    }
+  }
+
   return {
     limited: false,
     retryAfterSec: 0,
     clientIp,
     email,
-    emailGeneration,
-    ipGeneration,
-    pairGeneration,
+    emailGeneration: generations[0],
+    ipGeneration: ipKey ? generations[1] : null,
+    pairGeneration: pairKey ? generations[2] : null,
   };
 }
 

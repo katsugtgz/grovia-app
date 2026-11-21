@@ -6,6 +6,7 @@ import path from 'node:path';
 import { hashPassword, verifyPassword } from '@/lib/password';
 import { parseJsonBody } from '@/lib/api-helpers';
 import {
+  AdmittedLoginReservation,
   LOGIN_WINDOW_MS,
   MAX_CONCURRENT_PASSWORD_VERIFICATIONS,
   MAX_FAILED_IP_ATTEMPTS,
@@ -837,6 +838,11 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       expect(reserveLoginAttempt('10.0.0.1', 'another@grovia.io', t0).limited).toBe(false);
       // Now IP bucket is at 25 -> next attempt is limited
       expect(reserveLoginAttempt('10.0.0.1', 'overflow@grovia.io', t0).limited).toBe(true);
+      // The IP cap itself held (25, not eviction): retryAfter tracks the
+      // window that is actually closing.
+      const ipCapped = reserveLoginAttempt('10.0.0.1', 'overflow2@grovia.io', t0);
+      expect(ipCapped.limited).toBe(true);
+      expect(ipCapped.retryAfterSec).toBeLessThanOrEqual(900);
 
       // Capacity eviction evicts lowest-count buckets while preserving at-limit buckets
       resetLoginAttemptTracker();
@@ -849,13 +855,14 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       expect(getLoginAttemptBucketCount()).toBeLessThanOrEqual(5);
       expect(reserveLoginAttempt(null, 'locked@grovia.io', t0, 5).limited).toBe(true);
 
-      // Capacity eviction protects current reservation's keys (email/ip/pair) from self-eviction
-      // even when rotating IPs against a tiny bucket table
+      // Rotating IPs against a tiny bucket table: each attempt finalizes as a
+      // recorded failure, and the target identity's own keys are never
+      // eviction victims.
       resetLoginAttemptTracker();
       for (let i = 0; i < MAX_FAILED_LOGIN_ATTEMPTS; i += 1) {
-        expect(
-          reserveLoginAttempt(`198.51.100.${i + 1}`, 'rotating-target@grovia.io', t0, 3).limited
-        ).toBe(false);
+        const rotated = reserveLoginAttempt(`198.51.100.${i + 1}`, 'rotating-target@grovia.io', t0, 3);
+        expect(rotated.limited).toBe(false);
+        if (!rotated.limited) failLoginAttemptReservation(rotated);
       }
       expect(
         reserveLoginAttempt('198.51.100.99', 'rotating-target@grovia.io', t0, 3).limited
@@ -897,12 +904,7 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       expect(bogusLogout.status).toBe(200);
       expect(await verifySessionToken(tok2)).not.toBeNull();
 
-      // scrypt parameter sets where 128 * N * r > 64 MiB (e.g. N=131072, r=8 ->
-      // 128 MiB) exceed the configured maxmem. Node throws RangeError (an
-      // operational error verifyPassword now propagates); Bun's scrypt accepts
-      // the cost, so cross-runtime the observable contract is a clean `false`,
-      // never a wrong-password-style crash. Route-level propagation of
-      // operational errors is covered by the corrupted-hash 500 test below.
+      // The table alone exceeds 64 MiB; reject the stored costs as invalid.
       const overMaxMemHash = `scrypt:131072:8:1:${'aa'.repeat(16)}:${'bb'.repeat(64)}`;
       expect(await verifyPassword('grovia-demo-2026', overMaxMemHash)).toBe(false);
     });
@@ -925,8 +927,13 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       // B fails: its reservation finalizes as a recorded failure.
       if (resB.limited) throw new Error('unreachable');
       failLoginAttemptReservation(resB);
-      // One failure recorded -> one more attempt fits under the threshold.
-      expect(reserveLoginAttempt('10.0.0.7', 'flight@grovia.io', t0).limited).toBe(false);
+      // Exactly one failure recorded: MAX-1 further attempts succeed, the
+      // next one is refused — the failure count sits precisely at the
+      // threshold with no phantom unit left over.
+      for (let i = 0; i < MAX_FAILED_LOGIN_ATTEMPTS - 1; i += 1) {
+        expect(reserveLoginAttempt('10.0.0.7', 'flight@grovia.io', t0).limited).toBe(false);
+      }
+      expect(reserveLoginAttempt('10.0.0.7', 'flight@grovia.io', t0).limited).toBe(true);
       // Window expiry clears the recorded failure.
       expect(
         reserveLoginAttempt('100.0.0.7', 'flight@grovia.io', t0 + LOGIN_WINDOW_MS + 1).limited
@@ -940,9 +947,53 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       expect(fresh.limited).toBe(false);
       if (expired.limited) throw new Error('unreachable');
       rollbackLoginAttemptReservation(expired);
-      // The fresh reservation is still a live pending hold: one more attempt
-      // under the threshold succeeds, and the recorded failures remain counted.
-      expect(reserveLoginAttempt('10.0.0.8', 'stale@grovia.io', t0 + LOGIN_WINDOW_MS + 1).limited).toBe(false);
+      // The fresh reservation is still a live pending hold: its recorded
+      // failures remain counted — MAX-1 further attempts succeed and the next
+      // is refused, so the stale rollback removed exactly its own unit.
+      for (let i = 0; i < MAX_FAILED_LOGIN_ATTEMPTS - 1; i += 1) {
+        expect(
+          reserveLoginAttempt('10.0.0.8', 'stale@grovia.io', t0 + LOGIN_WINDOW_MS + 1).limited
+        ).toBe(false);
+      }
+      expect(
+        reserveLoginAttempt('10.0.0.8', 'stale@grovia.io', t0 + LOGIN_WINDOW_MS + 1).limited
+      ).toBe(true);
+      resetLoginAttemptTracker();
+    });
+
+    test('rate limiter: capacity rejection is all-or-nothing and never evicts pending buckets', () => {
+      resetLoginAttemptTracker();
+      const t0 = 1_700_000_000_000;
+
+      // Fill capacity entirely with live pending holds (in-flight requests).
+      const holds: AdmittedLoginReservation[] = [];
+      for (let i = 0; i < 4; i += 1) {
+        const r = reserveLoginAttempt(null, `p${i}@grovia.io`, t0, 4);
+        expect(r.limited).toBe(false);
+        if (r.limited) throw new Error('unreachable');
+        holds.push(r);
+      }
+      expect(getLoginAttemptBucketCount()).toBe(4);
+
+      // New identity: capacity is full and every bucket holds a pending
+      // reservation -> refused, nothing evicted, no partial state.
+      const refused = reserveLoginAttempt(null, 'blocked@grovia.io', t0, 4);
+      expect(refused.limited).toBe(true);
+      expect(refused.retryAfterSec).toBeGreaterThan(0);
+      expect(getLoginAttemptBucketCount()).toBe(4);
+      // The other requests' holds survived untouched: re-reserving the same
+      // identity still fits under its threshold (bucket alive, count 1).
+      expect(reserveLoginAttempt(null, 'p1@grovia.io', t0, 4).limited).toBe(false);
+
+      // Completing one hold frees its slot; admission then succeeds without
+      // evicting anyone else.
+      rollbackLoginAttemptReservation(holds[0]);
+      expect(getLoginAttemptBucketCount()).toBe(3);
+      const admitted = reserveLoginAttempt(null, 'blocked@grovia.io', t0, 4);
+      expect(admitted.limited).toBe(false);
+      expect(getLoginAttemptBucketCount()).toBe(4);
+      // Remaining original holds are still alive.
+      expect(reserveLoginAttempt(null, 'p2@grovia.io', t0, 4).limited).toBe(false);
       resetLoginAttemptTracker();
     });
 

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveAdminEmail, resolveAdminPassword } from './admin-env';
+import { resolveAdminEmail, resolveAdminPassword, type AdminEnv } from './admin-env';
 
 export interface StoredCookie {
   name: string;
@@ -323,7 +323,7 @@ export class LiveHttpClient {
   constructor(
     baseUrl: string,
     jar?: CookieJar,
-    private readonly adminEnv: NodeJS.ProcessEnv = process.env
+    private readonly adminEnv: AdminEnv = process.env
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.jar = jar ?? new CookieJar();

@@ -66,9 +66,9 @@
 | --- | --- | --- |
 | `/` | Public | Marketing landing page with product pitch, Bento feature highlights, pricing tiers, interactive waitlist signup (`POST /api/waitlist`), and zero employee PII in public JS bundles |
 | `/login` | Public | Email/password sign-in (`POST /api/auth/login`) with open-redirect-safe `next` target sanitization (`307` -> `/workspace` when already authenticated) |
-| `/workspace` | Authenticated | Protected Bento people-ops workspace (`Overview`, `People`, `Payroll`, `InviteModal`, `NotificationTray`, profile/sign-out menu); redirects unauthenticated requests (`307`) to `/login?next=%2Fworkspace` |
+| `/workspace` | Authenticated | Protected Bento people-ops workspace (`Overview`, `People`, `Payroll`, `NotificationTray`, profile/sign-out menu); redirects unauthenticated requests (`307`) to `/login?next=%2Fworkspace`. Roster PII is **admin-only**: non-admin sessions get the workspace shell with an empty roster, and roster-dependent actions (`InviteModal`, invite entry points) are hidden |
 
-- **Seeded Demo Workspace Account**:
+- **Seeded Demo Workspace Account** (rendered on `/login` only when the server actually seeds these defaults — i.e. demo admin is allowed in this environment and no `ADMIN_EMAIL`/`ADMIN_PASSWORD` overrides are configured):
   - **Email**: `admin@grovia.io`
   - **Password**: `grovia-demo-2026`
 - **Session Signing (`AUTH_SECRET`)**:
@@ -102,7 +102,7 @@
 | `POST` | `/api/auth/login` | Public | Authenticate user and set `HttpOnly` `grovia_session` cookie |
 | `POST` | `/api/auth/logout` | Public | Clear `grovia_session` cookie (`Max-Age=0`) |
 | `GET` | `/api/auth/session` | Authenticated | Inspect active session user (`200` authenticated, `401` unauthenticated) |
-| `GET`, `POST` | `/api/people` | Authenticated | List employee roster or invite teammate (`201` created, `409` duplicate email) |
+| `GET`, `POST` | `/api/people` | Authenticated (Admin) | List employee roster or invite teammate (`403` for non-admin sessions; `201` created, `409` duplicate email for admins). Roster PII (emails, phones, birthdays, pay rates) never leaves the server for non-admin sessions |
 | `GET` | `/api/metrics` | Authenticated | Live team/waitlist count, hiring pipeline distribution, and benchmark quartile |
 | `GET`, `POST`, `PATCH` | `/api/inquiries` (& `/[id]`) | Authenticated | Create & manage support tickets (`GROV-XXXX`) with status transitions |
 

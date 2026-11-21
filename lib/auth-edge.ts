@@ -45,11 +45,25 @@ function pruneRevokedTokens(nowSec: number): void {
   }
 }
 
-export function revokeSessionToken(token: string | null | undefined): void {
+/**
+ * Revokes a session token until its signed expiry. `tokenExpSec` should be the
+ * verified payload's `exp`: the revocation is then kept exactly until the
+ * token would expire on its own — never shorter (a long-lived revoked token
+ * must stay rejected) and never longer than necessary. Defaults to the
+ * standard session lifetime when the expiry is unknown.
+ */
+export function revokeSessionToken(
+  token: string | null | undefined,
+  tokenExpSec?: number
+): void {
   if (!token || typeof token !== 'string') return;
   const nowSec = Math.floor(Date.now() / 1000);
   pruneRevokedTokens(nowSec);
-  getRevokedTokensMap().set(token, nowSec + SESSION_MAX_AGE_SECONDS);
+  const deadlineSec =
+    typeof tokenExpSec === 'number' && Number.isFinite(tokenExpSec) && tokenExpSec > nowSec
+      ? Math.floor(tokenExpSec)
+      : nowSec + SESSION_MAX_AGE_SECONDS;
+  getRevokedTokensMap().set(token, deadlineSec);
 }
 
 export function clearRevokedSessionTokens(): void {

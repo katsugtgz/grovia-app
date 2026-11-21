@@ -15,7 +15,10 @@ export async function POST(request: Request): Promise<Response> {
   if (token) {
     const verified = await verifySessionToken(token);
     if (verified) {
-      revokeSessionToken(token);
+      // Keep the revocation exactly until the token's own signed expiry: a
+      // long-lived session must stay rejected for its whole remaining life,
+      // and a standard one is not retained a day longer than necessary.
+      revokeSessionToken(token, verified.exp);
     }
   }
   const response = NextResponse.json(

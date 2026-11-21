@@ -1,0 +1,16 @@
+lib/api-helpers.ts
+  h_cc1f32aec57e6b 33-41,50-51,95
+tests/unit/auth-api.test.ts
+  h_cc1f32aec57e6b 779-793
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "15578c268a787c410f9196f82e738fb0afb93061",
+  "prompts": {},
+  "humans": {
+    "h_cc1f32aec57e6b": {
+      "author": "Muhammad Naufal Mahdi <053792227@ecampus.ut.ac.id>"
+    }
+  }
+}

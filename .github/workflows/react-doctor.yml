@@ -1,5 +1,6 @@
 # React Doctor: security, performance, correctness, accessibility, bundle-size,
 # and architecture checks for React.
+# This workflow is the CI React Doctor gate; ci.yml runs the required test job.
 #
 # These settings were written by `react-doctor ci config`. Run it again to change them.
 # Docs: https://www.react.doctor/ci

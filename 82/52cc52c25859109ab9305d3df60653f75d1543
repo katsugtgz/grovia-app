@@ -1,0 +1,22 @@
+app/api/auth/login/route.ts
+  h_cc1f32aec57e6b 9,61,81,104-106
+lib/db.ts
+  h_cc1f32aec57e6b 85-98
+lib/login-rate-limit.ts
+  h_cc1f32aec57e6b 82-85,89,103-108,116,147-150,152-153,155-156,171-180,197-208
+tests/stress/full-app-stress.test.ts
+  h_cc1f32aec57e6b 14,129,133-135
+tests/unit/auth-api.test.ts
+  h_cc1f32aec57e6b 15,805-827
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8252cc52c25859109ab9305d3df60653f75d1543",
+  "prompts": {},
+  "humans": {
+    "h_cc1f32aec57e6b": {
+      "author": "Muhammad Naufal Mahdi <053792227@ecampus.ut.ac.id>"
+    }
+  }
+}

@@ -1356,6 +1356,77 @@ const check = (name, cond) => { if (!cond) { console.error('FAIL ' + name); fail
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// Snapshot deep validation: counters positive/safe AND strictly above every
+// stored id; every row well-typed. Fails before any seed/write; valid
+// snapshots load normally.
+{
+  const dir = fs.mkdtempSync(path.join(osMod.tmpdir(), 'p4-'));
+  process.env.NODE_ENV = 'development';
+  const base = { waitlist: [], inquiries: [], users: [], people: [], nextWaitlistId: 1, nextInquiryId: 1, nextUserId: 1 };
+  const writeSnap = (name, obj) => fs.writeFileSync(path.join(dir, name + '.db.store.json'), JSON.stringify(obj), 'utf8');
+  const loadThrows = (name) => {
+    process.env.DB_PATH = path.join(dir, name + '.db');
+    try { db.initDatabase(path.join(dir, name + '.db')); return false; } catch { return true; }
+  };
+  const badStaleCounter = { ...base, waitlist: [{ id: 5, name: 'n', email: 'e5@x.invalid', company: null, teamSize: null, useCase: null, status: 'active', createdAt: '2026-11-16 00:00:00' }], nextWaitlistId: 5 };
+  writeSnap('badctr', badStaleCounter);
+  check('stale counter throws', loadThrows('badctr'));
+  const badZeroCounter = { ...base, nextUserId: 0 };
+  writeSnap('zeroctr', badZeroCounter);
+  check('zero counter throws', loadThrows('zeroctr'));
+  const badFractional = { ...base, nextInquiryId: 2.5 };
+  writeSnap('fracctr', badFractional);
+  check('fractional counter throws', loadThrows('fracctr'));
+  const badUser = { ...base, nextUserId: 2, users: [{ id: 1, email: 'u@x.invalid', name: 'U', role: 'member', password_hash: 42, created_at: '2026-11-16 00:00:00' }] };
+  writeSnap('baduser', badUser);
+  check('ill-typed user row throws', loadThrows('baduser'));
+  check('baduser snapshot untouched', fs.readFileSync(path.join(dir, 'baduser.db.store.json'), 'utf8') === JSON.stringify(badUser));
+  const badPeople = { ...base, people: [{ ...base, id: '1' }] };
+  writeSnap('badpeople', badPeople);
+  check('ill-typed people row throws', loadThrows('badpeople'));
+  check('badpeople snapshot untouched', fs.readFileSync(path.join(dir, 'badpeople.db.store.json'), 'utf8') === JSON.stringify(badPeople));
+  const good = {
+    ...base,
+    nextUserId: 2,
+    users: [{ id: 1, email: 'seedme@grovia.io', name: 'Seed', role: 'member', password_hash: 'x', created_at: '2026-11-16 00:00:00' }],
+    people: [{ id: '9', name: 'P', role: 'Eng', team: 'T', city: 'Remote', hire_date: '2024-01-01', since: 'Invited today', status: 'Active', av: '#e9c98f', rate: 40, email: 'p9@x.invalid', phone: null, bday: null, look_json: null, created_at: '2026-11-16 00:00:00' }],
+  };
+  writeSnap('good', good);
+  process.env.DB_PATH = path.join(dir, 'good.db');
+  let seeded = false;
+  try { db.initDatabase(path.join(dir, 'good.db')); seeded = true; } catch { seeded = false; }
+  check('valid snapshot loads', seeded);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// Configured-admin seeding never promotes/overwrites an existing member row
+// carrying the configured admin email (JSON adapter path): init must throw,
+// and the snapshot file must survive byte-for-byte.
+{
+  const dir = fs.mkdtempSync(path.join(osMod.tmpdir(), 'p5-'));
+  process.env.NODE_ENV = 'development';
+  process.env.ADMIN_EMAIL = 'admin@grovia.io';
+  process.env.ADMIN_PASSWORD = 'probe-private-pass';
+  const memberUser = { id: 1, email: 'admin@grovia.io', name: 'Planted', role: 'member', password_hash: 'scrypt:16384:8:1:' + 'aa'.repeat(16) + ':' + 'bb'.repeat(64), created_at: '2026-11-16 00:00:00' };
+  const snapObj = { waitlist: [], inquiries: [], users: [memberUser], people: [], nextWaitlistId: 1, nextInquiryId: 1, nextUserId: 2 };
+  const snap = path.join(dir, 'collide.db.store.json');
+  const originalSnapshot = JSON.stringify(snapObj);
+  fs.writeFileSync(snap, originalSnapshot, 'utf8');
+  process.env.DB_PATH = path.join(dir, 'collide.db');
+  let threw = false;
+  try {
+    db.initDatabase(path.join(dir, 'collide.db'));
+  } catch (e) {
+    threw = String(e && e.message).includes('Refusing admin seeding');
+  }
+  check('member/admin collision throws', threw);
+  check('collision snapshot byte-identical', fs.readFileSync(snap, 'utf8') === originalSnapshot);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// Restore the ambient env the probe inherited (its mutations never leak into
+// later probes or the Bun runner); then exit with the contract verdict.
+for (const key of ['DB_PATH', 'ADMIN_EMAIL', 'ADMIN_PASSWORD']) delete process.env[key];
 process.exit(failures === 0 ? 0 : 1);
 `,
           'utf8'

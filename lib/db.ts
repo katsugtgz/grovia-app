@@ -7,6 +7,7 @@ import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASS } from './demo-credentials';
 import {
   getConfiguredPrivateAdminEmail,
   isPrivateAdminMode,
+  resolveConfiguredAdminEmail,
 } from './admin-mode';
 import { SEED_PEOPLE } from './seed-people';
 import { AVATAR_BG_COLORS, getAppearanceForSeed } from './template-core';
@@ -223,15 +224,116 @@ function getDummyStores(): DummyStores {
         // JSON adapter relies on must be present and well-typed. Partial
         // snapshots (e.g. hand-edited or truncated mid-write by an older
         // version) are rejected, not partially accepted.
-        const missingOrBad = !isPlainObject(parsed)
-          ? 'root'
-          : STORE_ARRAY_KEYS.filter((k) => !Array.isArray(parsed[k])).join(',') ||
-            STORE_COUNTER_KEYS.filter(
-              (k) => typeof parsed[k] !== 'number' || !Number.isFinite(parsed[k] as number)
-            ).join(',');
-        if (missingOrBad) {
+        const badParts: string[] = [];
+        if (!isPlainObject(parsed)) {
+          badParts.push('root');
+        } else {
+          for (const key of STORE_ARRAY_KEYS) {
+            if (!Array.isArray(parsed[key])) badParts.push(key);
+          }
+          for (const key of STORE_COUNTER_KEYS) {
+            const value = parsed[key];
+            if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+              badParts.push(key);
+            }
+          }
+          if (badParts.length === 0) {
+            // Row ids and next-ID counters must be positive safe integers, and a
+            // counter strictly above every stored id: a next-ID at or below an
+            // existing row would collide on the next insert.
+            const maxStoredId = (key: (typeof STORE_ARRAY_KEYS)[number]): number =>
+              (parsed[key] as unknown[]).reduce(
+                (max: number, row) =>
+                  isPlainObject(row) &&
+                  typeof row.id === 'number' &&
+                  Number.isSafeInteger(row.id) &&
+                  row.id > 0
+                    ? Math.max(max, row.id)
+                    : max,
+                0
+              );
+            if (maxStoredId('waitlist') >= (parsed.nextWaitlistId as number)) {
+              badParts.push('nextWaitlistId');
+            }
+            if (maxStoredId('inquiries') >= (parsed.nextInquiryId as number)) {
+              badParts.push('nextInquiryId');
+            }
+            if (maxStoredId('users') >= (parsed.nextUserId as number)) {
+              badParts.push('nextUserId');
+            }
+
+            // Every stored row must be fully well-typed: the adapter hands these
+            // fields straight to auth seeding and roster rendering, and a
+            // corrupted row must fail closed at load, not surface later.
+            const wellTyped: Record<
+              (typeof STORE_ARRAY_KEYS)[number],
+              (row: UnknownRecord) => boolean
+            > = {
+              waitlist: (r) =>
+                typeof r.id === 'number' &&
+                Number.isSafeInteger(r.id) &&
+                r.id > 0 &&
+                typeof r.name === 'string' &&
+                typeof r.email === 'string' &&
+                (r.company === null || typeof r.company === 'string') &&
+                (r.teamSize === null || typeof r.teamSize === 'string') &&
+                (r.useCase === null || typeof r.useCase === 'string') &&
+                typeof r.status === 'string' &&
+                typeof r.createdAt === 'string',
+              inquiries: (r) =>
+                typeof r.id === 'number' &&
+                Number.isSafeInteger(r.id) &&
+                r.id > 0 &&
+                typeof r.ticket_id === 'string' &&
+                typeof r.ticketId === 'string' &&
+                typeof r.name === 'string' &&
+                typeof r.email === 'string' &&
+                typeof r.subject === 'string' &&
+                typeof r.message === 'string' &&
+                typeof r.priority === 'string' &&
+                typeof r.status === 'string' &&
+                typeof r.created_at === 'string' &&
+                typeof r.updated_at === 'string',
+              users: (r) =>
+                typeof r.id === 'number' &&
+                Number.isSafeInteger(r.id) &&
+                r.id > 0 &&
+                typeof r.email === 'string' &&
+                typeof r.name === 'string' &&
+                typeof r.role === 'string' &&
+                typeof r.password_hash === 'string' &&
+                typeof r.created_at === 'string',
+              people: (r) =>
+                typeof r.id === 'string' &&
+                typeof r.name === 'string' &&
+                typeof r.role === 'string' &&
+                typeof r.team === 'string' &&
+                typeof r.city === 'string' &&
+                typeof r.hire_date === 'string' &&
+                typeof r.since === 'string' &&
+                typeof r.status === 'string' &&
+                typeof r.av === 'string' &&
+                typeof r.rate === 'number' &&
+                Number.isFinite(r.rate) &&
+                typeof r.email === 'string' &&
+                (r.phone === null || typeof r.phone === 'string') &&
+                (r.bday === null || typeof r.bday === 'string') &&
+                (r.look_json === null || typeof r.look_json === 'string') &&
+                typeof r.created_at === 'string',
+            };
+            for (const key of STORE_ARRAY_KEYS) {
+              (parsed[key] as unknown[]).forEach((row, index) => {
+                if (!isPlainObject(row) || !wellTyped[key](row)) {
+                  badParts.push(`${key}[${index}]`);
+                }
+              });
+            }
+          }
+        }
+        if (badParts.length > 0) {
+          const listed = badParts.slice(0, 8).join(',');
           throw new Error(
-            `Data snapshot at ${snapshotPath} is malformed (bad: ${missingOrBad}); refusing to overwrite it with seed data.`
+            `Data snapshot at ${snapshotPath} is malformed (bad: ${listed}${badParts.length > 8 ? ',…' : ''}); refusing to overwrite it with seed data.`
           );
         }
         globalThis.__grovia_dummy_stores__ = parsed as unknown as DummyStores;
@@ -438,7 +540,11 @@ function getDatabaseConstructor(): typeof Database {
               if (normalized.startsWith('UPDATE USERS')) {
                 const [newHash, targetEmail] = params;
                 const emailStr = String(targetEmail ?? '').trim().toLowerCase();
-                const row = stores.users.find((u) => u.email.toLowerCase() === emailStr);
+                const adminOnly = normalized.includes("ROLE = 'ADMIN'");
+                const row = stores.users.find(
+                  (u) =>
+                    u.email.toLowerCase() === emailStr && (!adminOnly || u.role.toLowerCase() === 'admin')
+                );
                 if (!row) return { changes: 0 };
                 const prevHash = row.password_hash;
                 row.password_hash = String(newHash ?? '');
@@ -767,10 +873,7 @@ export function initSchema(database: Database): void {
 }
 
 export function getConfiguredAdminEmail(): string {
-  const configured = process.env.ADMIN_EMAIL?.trim();
-  return (configured && configured.length > 0 ? configured : DEMO_ADMIN_EMAIL)
-    .trim()
-    .toLowerCase();
+  return resolveConfiguredAdminEmail();
 }
 
 export function isDemoAdminAllowedInEnv(): boolean {
@@ -883,8 +986,22 @@ export async function showsDefaultDemoCredentials(): Promise<boolean> {
   }
 }
 
+/**
+ * Provisioning lookup for the configured admin identity: one select returning
+ * the row's role, so a member row pre-claiming that email can be rejected
+ * before any password-hash mutation.
+ */
+function findUserRowForSeeding(
+  database: Database,
+  adminEmail: string
+): { id: unknown; role: string } | undefined {
+  return database
+    .prepare('SELECT id, role FROM users WHERE LOWER(email) = ?')
+    .get(adminEmail) as { id: unknown; role: string } | undefined;
+}
+
 export function ensureAuthAndPeopleSeeded(database: Database): void {
-  const adminEmail = getConfiguredAdminEmail();
+  const adminEmail = resolveConfiguredAdminEmail();
   const configuredAdminPassword = process.env.ADMIN_PASSWORD?.trim();
   const allowDemoAdmin = isDemoAdminAllowedInEnv();
   const adminPassword =
@@ -895,11 +1012,18 @@ export function ensureAuthAndPeopleSeeded(database: Database): void {
         : null;
 
   if (adminPassword) {
-    const existingAdmin = database
-      .prepare('SELECT id FROM users WHERE LOWER(email) = ?')
-      .get(adminEmail);
+    const existingRow = findUserRowForSeeding(database, adminEmail);
+    if (existingRow && existingRow.role.toLowerCase() !== 'admin') {
+      // Reject a non-admin row already holding the configured admin identity
+      // before any password-hash mutation: rotating that row's hash (or
+      // ignoring it) would silently promote member data to the privileged
+      // account — regardless of demo opt-in.
+      throw new Error(
+        `Refusing admin seeding: non-admin user already exists with configured admin email ${adminEmail}.`
+      );
+    }
 
-    if (!existingAdmin) {
+    if (!existingRow) {
       const adminHash = hashPassword(adminPassword);
       database
         .prepare('INSERT OR IGNORE INTO users (email, name, role, password_hash) VALUES (?, ?, ?, ?)')
@@ -907,9 +1031,12 @@ export function ensureAuthAndPeopleSeeded(database: Database): void {
     } else if (configuredAdminPassword && configuredAdminPassword.length > 0) {
       // Rotate stored admin hash when an explicit ADMIN_PASSWORD is configured so a
       // previously seeded public demo password cannot survive into production.
+      // The role predicate keeps non-admin rows at this email out of scope.
       const rotatedHash = hashPassword(configuredAdminPassword);
       database
-        .prepare('UPDATE users SET password_hash = ? WHERE LOWER(email) = ?')
+        .prepare(
+          "UPDATE users SET password_hash = ? WHERE LOWER(email) = ? AND role = 'admin' COLLATE NOCASE"
+        )
         .run(rotatedHash, adminEmail);
     }
   }
@@ -965,11 +1092,14 @@ export function initDatabase(dbPath?: string): Database {
   // them so stale rows can never flush into the new snapshot — including the
   // case where env already points at a different path (the previous path is
   // no longer observable here, so unconditional clearing is the only safe
-  // order).
+  // order). The cache is dropped and the path published BEFORE schema init:
+  // a rejected initialization must leave the module in a cold state (no open
+  // handle, no snapshot rows) so the next getDb() re-seeds from scratch.
   globalThis.__grovia_dummy_stores__ = undefined;
+  globalThis.__grovia_db__ = undefined;
+  globalThis.__grovia_db_path__ = targetPath;
 
   const DbConstructor = getDatabaseConstructor();
-  globalThis.__grovia_db_path__ = targetPath;
   const database = new DbConstructor(targetPath, { create: true });
   configurePragmas(database);
   initSchema(database);

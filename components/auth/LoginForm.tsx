@@ -16,9 +16,10 @@ import {
 export interface LoginFormProps {
   nextPath?: string;
   /**
-   * Server-computed via `showsDefaultDemoCredentials()`: render the demo block
-   * only when the well-known demo account is what is actually seeded here
-   * (demo admin allowed AND no ADMIN_EMAIL/ADMIN_PASSWORD overrides). Never
+   * Server-computed via `await showsDefaultDemoCredentials()`: render the demo
+   * block only when the well-known demo credentials are config-allowed and the
+   * persisted demo admin row actually verifies that password (stale saved
+   * passwords, missing rows, and read failures all hide the hint). Never
    * expose real configured credentials through this prop.
    */
   showDemoCredentials?: boolean;

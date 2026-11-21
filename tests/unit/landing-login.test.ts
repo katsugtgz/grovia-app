@@ -12,9 +12,8 @@ import {
   validateWaitlistInput,
 } from '@/components/landing/landing-data';
 import { LoginForm } from '@/components/auth/LoginForm';
+import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASS } from '@/lib/demo-credentials';
 import {
-  DEMO_ADMIN_EMAIL,
-  DEMO_ADMIN_PASS,
   resolveLoginPageState,
   resolveSafeNext,
   submitLoginRequest,
@@ -418,15 +417,29 @@ describe('Unit — M2 Landing Page, Login Page & PII Isolation', () => {
     });
 
     test('unauthenticated LoginPage renders LoginForm SSR markup without nested <main>', async () => {
-      const element = await LoginPage({
-        searchParams: Promise.resolve({ next: '/workspace?tab=people' }),
-      });
-      const html = renderToStaticMarkup(element);
+      // Demo disallowed (prod, no opt-in) short-circuits the hint gate before
+      // any DB lookup; scoped restore keeps ambient DB_PATH/ADMIN_* inert and
+      // prevents initializing the project/user database in this SSR test.
+      const mutableEnv = process.env as Record<string, string | undefined>;
+      const prevNodeEnv = mutableEnv.NODE_ENV;
+      const prevAllowDemoAdmin = mutableEnv.ALLOW_DEMO_ADMIN;
+      mutableEnv.NODE_ENV = 'production';
+      delete mutableEnv.ALLOW_DEMO_ADMIN;
+      try {
+        const element = await LoginPage({
+          searchParams: Promise.resolve({ next: '/workspace?tab=people' }),
+        });
+        const html = renderToStaticMarkup(element);
 
-      expect(html).toContain('Sign in to Grovia');
-      expect(html).toContain('type="email"');
-      expect(html).toContain('type="password"');
-      expect(html).not.toContain('<main');
+        expect(html).toContain('Sign in to Grovia');
+        expect(html).toContain('type="email"');
+        expect(html).toContain('type="password"');
+        expect(html).not.toContain('<main');
+      } finally {
+        mutableEnv.NODE_ENV = prevNodeEnv;
+        if (prevAllowDemoAdmin === undefined) delete process.env.ALLOW_DEMO_ADMIN;
+        else process.env.ALLOW_DEMO_ADMIN = prevAllowDemoAdmin;
+      }
     });
 
     test('next/navigation redirect throws 307 NEXT_REDIRECT to sanitized target', () => {

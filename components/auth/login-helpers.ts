@@ -6,9 +6,6 @@ import {
 import { EMAIL_PATTERN } from '@/lib/email-validation';
 import type { AuthLoginResponse, AuthUser } from '@/lib/types';
 
-export const DEMO_ADMIN_EMAIL = 'admin@grovia.io';
-export const DEMO_ADMIN_PASS = 'grovia-demo-2026';
-
 export interface LoginFieldErrors {
   email?: string;
   password?: string;

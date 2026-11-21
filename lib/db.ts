@@ -2,7 +2,8 @@ import type { Database } from 'bun:sqlite';
 import path from 'path';
 import fs from 'fs';
 import { createRequire } from 'node:module';
-import { hashPassword } from './password';
+import { hashPassword, verifyPassword } from './password';
+import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASS } from './demo-credentials';
 import { SEED_PEOPLE } from './seed-people';
 import { AVATAR_BG_COLORS, getAppearanceForSeed } from './template-core';
 import { DEFAULT_AVATAR_COLOR } from './data';
@@ -81,6 +82,15 @@ declare global {
   // eslint-disable-next-line no-var
   var __grovia_dummy_stores__: DummyStores | undefined;
 }
+
+/**
+ * Single-entry memo for the demo-credential hint check: `{ storedHash,
+ * promise }` where `promise` is stored synchronously before the expensive
+ * scrypt verification is awaited, so concurrent callers share one pass and a
+ * slower stale computation can never overwrite a newer verdict. Keyed by the
+ * stored hash, so password rotation re-computes with no TTL to expire.
+ */
+let demoHintEntry: { storedHash: string; promise: Promise<boolean> } | null = null;
 
 function getDummyStoreSnapshotPath(): string | null {
   const explicitEnvPath =
@@ -688,7 +698,7 @@ export function initSchema(database: Database): void {
 }
 
 export function getConfiguredAdminEmail(): string {
-  return (process.env.ADMIN_EMAIL || 'admin@grovia.io').trim().toLowerCase();
+  return (process.env.ADMIN_EMAIL || DEMO_ADMIN_EMAIL).trim().toLowerCase();
 }
 
 export function isDemoAdminAllowedInEnv(): boolean {
@@ -718,16 +728,53 @@ export function isRosterAdminSession(session: {
 
 /**
  * Whether the well-known demo credentials (`admin@grovia.io` /
- * `grovia-demo-2026`) are the ones actually seeded in this environment. The
- * login page may render them only when this is true: configured
- * `ADMIN_EMAIL`/`ADMIN_PASSWORD` overrides make the defaults stale, and
- * production without `ALLOW_DEMO_ADMIN=1` does not seed them at all.
+ * `grovia-demo-2026`) are the ones actually live in this environment. The
+ * login page may render them only when this is true:
+ *
+ * - the environment allows the demo admin and neither `ADMIN_EMAIL` nor
+ *   `ADMIN_PASSWORD` overrides the defaults (cheap config gate, checked on
+ *   every call), and
+ * - the persisted admin row actually verifies the shared demo password
+ *   (seeding is insert-or-ignore, so a previously saved admin password —
+ *   e.g. seeded earlier under `ADMIN_PASSWORD`, override since removed — must
+ *   not be claimed as the demo defaults).
+ *
+ * Read failures or a missing row fail closed (no hint). The lookup itself is
+ * read-only; only the costly verification result is cached, in a single-entry
+ * promise keyed by the stored hash, so config changes re-evaluate immediately
+ * while password rotation re-keys the cache with no TTL to expire.
  */
-export function showsDefaultDemoCredentials(): boolean {
-  if (!isDemoAdminAllowedInEnv()) return false;
-  if (getConfiguredAdminEmail() !== 'admin@grovia.io') return false;
-  if (process.env.ADMIN_PASSWORD?.trim()) return false;
-  return true;
+export async function showsDefaultDemoCredentials(): Promise<boolean> {
+  if (
+    !isDemoAdminAllowedInEnv() ||
+    getConfiguredAdminEmail() !== DEMO_ADMIN_EMAIL ||
+    process.env.ADMIN_PASSWORD?.trim()
+  ) {
+    return false;
+  }
+
+  let entry = demoHintEntry;
+  try {
+    const user = findUserByEmail(DEMO_ADMIN_EMAIL);
+    if (!user || user.role !== 'admin') {
+      demoHintEntry = null;
+      return false;
+    }
+    if (!entry || entry.storedHash !== user.password_hash) {
+      // Store the pending promise synchronously: concurrent callers await this
+      // same pass, and later verdicts only replace the entry keyed by their
+      // own hash.
+      entry = {
+        storedHash: user.password_hash,
+        promise: verifyPassword(DEMO_ADMIN_PASS, user.password_hash).catch(() => false),
+      };
+      demoHintEntry = entry;
+    }
+    return await entry.promise;
+  } catch {
+    demoHintEntry = null;
+    return false;
+  }
 }
 
 export function ensureAuthAndPeopleSeeded(database: Database): void {
@@ -738,7 +785,7 @@ export function ensureAuthAndPeopleSeeded(database: Database): void {
     configuredAdminPassword && configuredAdminPassword.length > 0
       ? configuredAdminPassword
       : allowDemoAdmin
-        ? 'grovia-demo-2026'
+        ? DEMO_ADMIN_PASS
         : null;
 
   if (adminPassword) {

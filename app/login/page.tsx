@@ -30,7 +30,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <LoginForm
       nextPath={nextPath}
-      showDemoCredentials={showsDefaultDemoCredentials()}
+      showDemoCredentials={await showsDefaultDemoCredentials()}
     />
   );
 }

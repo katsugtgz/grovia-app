@@ -8,9 +8,34 @@ export const MAX_FAILED_LOGIN_ATTEMPTS = 10;
 export const MAX_FAILED_IP_ATTEMPTS = 25;
 export const MAX_LOGIN_ATTEMPT_BUCKETS = 2000;
 
+/**
+ * Upper bound on password verifications admitted concurrently across the
+ * process. `crypto.scrypt` runs on the shared libuv threadpool (default size
+ * 4), so unbounded concurrent verifications starve legitimate sign-ins (and
+ * the rest of the app). Requests over this cap receive a fast 429 before any
+ * scrypt work starts.
+ */
+export const MAX_CONCURRENT_PASSWORD_VERIFICATIONS = 8;
+
+/** Retry-After hint (seconds) returned while the verification pool is saturated. */
+export const PASSWORD_VERIFICATION_RETRY_AFTER_SEC = 2;
+
 interface FailedLoginBucket {
+  /**
+   * Total outstanding units: every admitted request's pending reservation
+   * plus every recorded failure. Buckets are deleted exactly when this
+   * reaches 0.
+   */
   count: number;
   resetAt: number;
+  /** Reservations currently in flight against this bucket. */
+  pending: number;
+  /**
+   * Monotonic id bumped every time this bucket is (re)created after expiry or
+   * replacement; reservation handles record the generation they reserved so
+   * finalization can never touch a newer bucket for the same key.
+   */
+  generation: number;
 }
 
 declare global {
@@ -25,12 +50,65 @@ function getLoginAttemptStore(): Map<string, FailedLoginBucket> {
   return globalThis.__grovia_login_attempts__;
 }
 
+let inFlightPasswordVerifications = 0;
+let nextBucketGeneration = 1;
+
+/**
+ * Identity-tracked reservation returned by `reserveLoginAttempt`. Pass the
+ * admitted variant to `releaseLoginAttempt` /
+ * `rollbackLoginAttemptReservation` so finalization only touches the buckets
+ * this exact request reserved, never a bucket that was replaced after the
+ * reservation's window expired.
+ */
+export type LoginAttemptReservation =
+  | { limited: true; retryAfterSec: number }
+  | {
+      limited: false;
+      retryAfterSec: 0;
+      clientIp: string | null;
+      email: string;
+      /** Generation of the email bucket at reservation time. */
+      emailGeneration: number;
+      /** Generation of the IP bucket at reservation time, when an IP was present. */
+      ipGeneration: number | null;
+      /** Generation of the pair bucket at reservation time, when an IP was present. */
+      pairGeneration: number | null;
+    };
+
+export type AdmittedLoginReservation = Extract<LoginAttemptReservation, { limited: false }>;
+
 export function resetLoginAttemptTracker(): void {
   getLoginAttemptStore().clear();
+  inFlightPasswordVerifications = 0;
 }
 
 export function getLoginAttemptBucketCount(): number {
   return getLoginAttemptStore().size;
+}
+
+/**
+ * Reserves one of the bounded password-verification slots. Returns the slot
+ * handle, or -1 when the pool is exhausted; callers must reject such requests
+ * with 429 before starting scrypt. Pass the handle to
+ * `releasePasswordVerificationSlot` on every completion path.
+ */
+export function reservePasswordVerificationSlot(): number {
+  if (inFlightPasswordVerifications >= MAX_CONCURRENT_PASSWORD_VERIFICATIONS) {
+    return -1;
+  }
+  inFlightPasswordVerifications += 1;
+  return inFlightPasswordVerifications;
+}
+
+/**
+ * Releases a previously reserved verification slot. Safe to call with -1 or
+ * undefined; never drops the count below zero.
+ */
+export function releasePasswordVerificationSlot(handle?: number): void {
+  if (handle === undefined || handle < 0) return;
+  if (inFlightPasswordVerifications > 0) {
+    inFlightPasswordVerifications -= 1;
+  }
 }
 
 /**
@@ -105,45 +183,54 @@ function incrementBucket(
   now: number,
   maxBuckets: number,
   protectedKeys: ReadonlySet<string>
-): void {
+): number {
   const store = getLoginAttemptStore();
   if (store.size > 500 || store.size >= maxBuckets) {
     for (const [k, v] of store.entries()) {
       if (now >= v.resetAt) store.delete(k);
     }
   }
-  if (!store.has(key) && store.size >= maxBuckets) {
-    evictLowestCountBucket(store, protectedKeys);
-  }
   const existing = store.get(key);
-  if (!existing || now >= existing.resetAt) {
-    store.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
-  } else {
-    existing.count += 1;
+  if (!existing) {
+    if (store.size >= maxBuckets) {
+      evictLowestCountBucket(store, protectedKeys);
+    }
+    const bucket: FailedLoginBucket = {
+      count: 1,
+      resetAt: now + LOGIN_WINDOW_MS,
+      generation: nextBucketGeneration,
+      pending: 1,
+    };
+    nextBucketGeneration += 1;
+    store.set(key, bucket);
+    return bucket.generation;
   }
-}
-
-function decrementBucket(key: string): void {
-  const store = getLoginAttemptStore();
-  const existing = store.get(key);
-  if (!existing) return;
-  if (existing.count <= 1) {
-    store.delete(key);
-  } else {
-    existing.count -= 1;
+  if (now >= existing.resetAt) {
+    existing.count = 1;
+    existing.resetAt = now + LOGIN_WINDOW_MS;
+    existing.generation = nextBucketGeneration;
+    existing.pending = 1;
+    nextBucketGeneration += 1;
+    return existing.generation;
   }
+  existing.count += 1;
+  existing.pending += 1;
+  return existing.generation;
 }
 
 /**
- * Atomically checks rate limits and reserves an attempt BEFORE awaiting async password
- * verification, preventing concurrent bursts from bypassing thresholds while scrypt runs.
+ * Reserves one attempt per active identity bucket BEFORE awaiting async
+ * password verification, preventing concurrent bursts from bypassing
+ * thresholds while scrypt runs. Returns an identity handle: finalization must
+ * use the handle-taking `releaseLoginAttempt` /
+ * `rollbackLoginAttemptReservation`.
  */
 export function reserveLoginAttempt(
   clientIp: string | null,
   email: string,
   now: number = Date.now(),
   maxBuckets: number = MAX_LOGIN_ATTEMPT_BUCKETS
-): { limited: boolean; retryAfterSec: number } {
+): LoginAttemptReservation {
   const emailKey = `email:${email}`;
   const ipKey = clientIp ? `ip:${clientIp}` : null;
   const pairKey = clientIp ? `pair:${clientIp}:${email}` : null;
@@ -174,35 +261,104 @@ export function reserveLoginAttempt(
     ...(pairKey ? [pairKey] : []),
   ]);
 
-  incrementBucket(emailKey, now, maxBuckets, protectedKeys);
+  const emailGeneration = incrementBucket(emailKey, now, maxBuckets, protectedKeys);
+  let ipGeneration: number | null = null;
+  let pairGeneration: number | null = null;
   if (ipKey && pairKey) {
-    incrementBucket(ipKey, now, maxBuckets, protectedKeys);
-    incrementBucket(pairKey, now, maxBuckets, protectedKeys);
+    ipGeneration = incrementBucket(ipKey, now, maxBuckets, protectedKeys);
+    pairGeneration = incrementBucket(pairKey, now, maxBuckets, protectedKeys);
   }
-  return { limited: false, retryAfterSec: 0 };
+  return {
+    limited: false,
+    retryAfterSec: 0,
+    clientIp,
+    email,
+    emailGeneration,
+    ipGeneration,
+    pairGeneration,
+  };
 }
 
 /**
- * Releases the reserved attempt on successful authentication: clears the email/pair failure
- * buckets and rolls back the reserved IP-bucket increment.
+ * Finalizes one pending reservation against its bucket if that exact bucket
+ * generation is still current.
+ *
+ * Invariant: `count === pending + recordedFailures`. Every finalization
+ * decrements `pending` first. Then:
+ * - `fail` (rejected credentials): count unchanged — the attempt stays
+ *   recorded for the window;
+ * - `rollback` (internal error): the request's own unit is removed;
+ * - `clear` (success, email/pair): all remaining units are forgiven
+ *   (`count = pending` — still-pending requests keep their hold);
+ * - `rollback` used for IP success: removes only this request's unit.
+ *
+ * A bucket is deleted exactly when `count` reaches 0.
  */
-export function releaseLoginAttempt(clientIp: string | null, email: string): void {
+function finalizePending(
+  store: Map<string, FailedLoginBucket>,
+  key: string,
+  generation: number | null,
+  mode: 'clear' | 'rollback' | 'fail'
+): void {
+  if (generation === null) return;
+  const bucket = store.get(key);
+  if (!bucket || bucket.generation !== generation) return;
+  if (bucket.pending > 0) {
+    bucket.pending -= 1;
+  }
+  if (mode === 'clear') {
+    bucket.count = bucket.pending;
+  } else if (mode === 'rollback' && bucket.count > 0) {
+    bucket.count -= 1;
+  }
+  if (bucket.count <= 0) {
+    store.delete(key);
+  }
+}
+
+/**
+ * Releases the reserved attempt on successful authentication: email/pair
+ * buckets forgive all completed failures (`count = pending` — concurrent
+ * requests keep their holds), the IP bucket rolls back only this request's
+ * own unit. Stale (expired-and-replaced) buckets are left untouched.
+ */
+export function releaseLoginAttempt(reservation: AdmittedLoginReservation): void {
   const store = getLoginAttemptStore();
-  store.delete(`email:${email}`);
+  const { clientIp, email } = reservation;
+  finalizePending(store, `email:${email}`, reservation.emailGeneration, 'clear');
   if (clientIp) {
-    store.delete(`pair:${clientIp}:${email}`);
-    decrementBucket(`ip:${clientIp}`);
+    finalizePending(store, `pair:${clientIp}:${email}`, reservation.pairGeneration, 'clear');
+    finalizePending(store, `ip:${clientIp}`, reservation.ipGeneration, 'rollback');
   }
 }
 
 /**
- * Rolls back a single reserved attempt when an internal error occurs before credentials
- * can be verified, avoiding outage-induced lockouts without clearing prior failed attempts.
+ * Finalizes a rejected-credentials reservation: the attempt stays recorded as
+ * a failure for the window (throttling repeats) while the pending hold is
+ * released. Stale (expired-and-replaced) reservations are left untouched.
  */
-export function rollbackLoginAttemptReservation(clientIp: string | null, email: string): void {
-  decrementBucket(`email:${email}`);
+export function failLoginAttemptReservation(reservation: AdmittedLoginReservation): void {
+  const store = getLoginAttemptStore();
+  const { clientIp, email } = reservation;
+  finalizePending(store, `email:${email}`, reservation.emailGeneration, 'fail');
   if (clientIp) {
-    decrementBucket(`ip:${clientIp}`);
-    decrementBucket(`pair:${clientIp}:${email}`);
+    finalizePending(store, `ip:${clientIp}`, reservation.ipGeneration, 'fail');
+    finalizePending(store, `pair:${clientIp}:${email}`, reservation.pairGeneration, 'fail');
+  }
+}
+
+/**
+ * Rolls back the single attempt this reservation reserved when an internal
+ * error occurs before credentials could be verified. A no-op when the
+ * reservation's bucket has expired and been replaced meanwhile — that would
+ * otherwise delete another request's only recorded attempt.
+ */
+export function rollbackLoginAttemptReservation(reservation: AdmittedLoginReservation): void {
+  const store = getLoginAttemptStore();
+  const { clientIp, email } = reservation;
+  finalizePending(store, `email:${email}`, reservation.emailGeneration, 'rollback');
+  if (clientIp) {
+    finalizePending(store, `ip:${clientIp}`, reservation.ipGeneration, 'rollback');
+    finalizePending(store, `pair:${clientIp}:${email}`, reservation.pairGeneration, 'rollback');
   }
 }

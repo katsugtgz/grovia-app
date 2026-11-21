@@ -1,4 +1,11 @@
-import { randomBytes, scrypt as scryptCallback, scryptSync, timingSafeEqual } from 'node:crypto';
+import {
+  createHash,
+  randomBytes,
+  scrypt as scryptCallback,
+  scryptSync,
+  timingSafeEqual,
+} from 'node:crypto';
+import { DEMO_ADMIN_PASS } from './demo-credentials';
 
 const SALT_BYTES = 16;
 const KEY_LENGTH = 64;
@@ -135,29 +142,60 @@ export async function verifyPassword(password: string, storedHash: string): Prom
   const parsed = parseStoredScryptHash(storedHash);
   if (!parsed) return false;
 
-  try {
-    const actual = await new Promise<Buffer>((resolve, reject) => {
-      scryptCallback(
-        password,
-        parsed.salt,
-        parsed.expected.length,
-        {
-          N: parsed.n,
-          r: parsed.r,
-          p: parsed.p,
-          maxmem: MAX_MEM,
-        },
-        (err, derivedKey) => {
-          if (err) reject(err);
-          else resolve(derivedKey);
-        }
-      );
-    });
-    if (actual.length !== parsed.expected.length) return false;
-    return timingSafeEqual(actual, parsed.expected);
-  } catch {
-    return false;
-  }
+  const { promise: actual, resolve, reject } = Promise.withResolvers<Buffer>();
+  scryptCallback(
+    password,
+    parsed.salt,
+    parsed.expected.length,
+    {
+      N: parsed.n,
+      r: parsed.r,
+      p: parsed.p,
+      maxmem: MAX_MEM,
+    },
+    (err, derivedKey) => {
+      if (err) reject(err);
+      else resolve(derivedKey);
+    }
+  );
+  const derived = await actual;
+  if (derived.length !== parsed.expected.length) return false;
+  return timingSafeEqual(derived, parsed.expected);
 }
 
 export const verifyPasswordAsync = verifyPassword;
+
+const DEMO_PASS_DIGEST = createHash('sha256').update(DEMO_ADMIN_PASS).digest();
+
+let configuredAdminPassDigest: { value: string; digest: Buffer } | null = null;
+
+/**
+ * Timing-safe check whether a candidate password equals the currently
+ * configured `ADMIN_PASSWORD` (trimmed, as seeding hashes it). Part of the
+ * private-mode login proof: the configured identity must present the actual
+ * configured credential, not merely pass a stored-hash comparison.
+ */
+export function equalsConfiguredAdminPassword(candidate: string): boolean {
+  const configured = process.env.ADMIN_PASSWORD?.trim();
+  if (typeof candidate !== 'string' || candidate.length === 0 || !configured) return false;
+  if (!configuredAdminPassDigest || configuredAdminPassDigest.value !== configured) {
+    configuredAdminPassDigest = {
+      value: configured,
+      digest: createHash('sha256').update(configured).digest(),
+    };
+  }
+  const candidateDigest = createHash('sha256').update(candidate).digest();
+  return timingSafeEqual(candidateDigest, configuredAdminPassDigest.digest);
+}
+
+/**
+ * Timing-safe check whether a candidate password equals the publicly known
+ * demo credential. Used by the login route to reject the public demo password
+ * in production environments where the demo admin is not enabled — without a
+ * comparison-time oracle and without touching stored credentials.
+ */
+export function equalsPublicDemoPassword(candidate: string): boolean {
+  if (typeof candidate !== 'string' || candidate.length === 0) return false;
+  const candidateDigest = createHash('sha256').update(candidate).digest();
+  return timingSafeEqual(candidateDigest, DEMO_PASS_DIGEST);
+}

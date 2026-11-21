@@ -4,6 +4,10 @@ import fs from 'fs';
 import { createRequire } from 'node:module';
 import { hashPassword, verifyPassword } from './password';
 import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASS } from './demo-credentials';
+import {
+  getConfiguredPrivateAdminEmail,
+  isPrivateAdminMode,
+} from './admin-mode';
 import { SEED_PEOPLE } from './seed-people';
 import { AVATAR_BG_COLORS, getAppearanceForSeed } from './template-core';
 import { DEFAULT_AVATAR_COLOR } from './data';
@@ -763,32 +767,63 @@ export function initSchema(database: Database): void {
 }
 
 export function getConfiguredAdminEmail(): string {
-  return (process.env.ADMIN_EMAIL || DEMO_ADMIN_EMAIL).trim().toLowerCase();
+  const configured = process.env.ADMIN_EMAIL?.trim();
+  return (configured && configured.length > 0 ? configured : DEMO_ADMIN_EMAIL)
+    .trim()
+    .toLowerCase();
 }
 
 export function isDemoAdminAllowedInEnv(): boolean {
   return process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_ADMIN === '1';
 }
 
-export function isProductionDemoAdminBlocked(email: string): boolean {
-  if (process.env.NODE_ENV !== 'production') return false;
-  if (process.env.ALLOW_DEMO_ADMIN === '1') return false;
-  if (process.env.ADMIN_PASSWORD?.trim()) return false;
-  return email.trim().toLowerCase() === getConfiguredAdminEmail();
+/**
+ * Production privileged-admin policy, fail closed: administrator sessions are
+ * honored ONLY when the deployment explicitly opted into demo mode
+ * (`ALLOW_DEMO_ADMIN=1`) or runs a valid private mode (`ADMIN_PASSWORD` set to
+ * a non-public value — never the publicly known demo password). Any other
+ * production configuration — no private password, or the public default
+ * masquerading as one — rejects privileged admin access outright, including
+ * legacy demo-era sessions for any previously configured custom admin email.
+ * Ordinary member sessions are unaffected.
+ */
+export function isPrivilegedAdminSessionAllowed(session: {
+  role: string;
+  email: string;
+}): boolean {
+  if (session.role !== 'admin') return false;
+  if (process.env.NODE_ENV !== 'production') return true;
+  if (process.env.ALLOW_DEMO_ADMIN === '1') return true;
+  return isPrivateAdminMode();
 }
 
 /**
  * Single server-side policy for roster PII access (list + invite), shared by
- * `/api/people` and the `/workspace` page so the API and the shell can never
- * disagree about who may see or mutate the roster.
+ * `/api/people`, `/api/waitlist` and the `/workspace` page so all three can
+ * never disagree about who may see or mutate privileged data.
+ *
+ * Production is fail closed (`isPrivilegedAdminSessionAllowed`): admin access
+ * requires explicit demo opt-in or a valid private mode. Private mode further
+ * restricts to the configured identity, honored on the strength of the
+ * login-time proof — the login route verifies the submitted password against
+ * the configured identity's stored row (the only path that issues a
+ * `cred`-stamped admin session) and the session layer rejects admin sessions
+ * whose credential-version stamp is missing or stale. No per-request scrypt
+ * runs on read paths.
+ *
+ * Legacy demo-era rows (any stale admin row seeded with the public demo
+ * password, under any historical admin email) fail closed: production without
+ * demo opt-in grants no privileged admin access, and in private mode they are
+ * not the configured identity.
  */
-export function isRosterAdminSession(session: {
-  role: string;
-  email: string;
-}): boolean {
-  return (
-    session.role === 'admin' && !isProductionDemoAdminBlocked(session.email)
-  );
+export function isRosterAdminSession(session: { role: string; email: string }): boolean {
+  if (session.role !== 'admin') return false;
+  if (process.env.NODE_ENV !== 'production') return true;
+  if (!isPrivateAdminMode()) {
+    return process.env.ALLOW_DEMO_ADMIN === '1';
+  }
+  const configuredEmail = getConfiguredPrivateAdminEmail();
+  return configuredEmail !== null && session.email.trim().toLowerCase() === configuredEmail;
 }
 
 /**
@@ -831,13 +866,19 @@ export async function showsDefaultDemoCredentials(): Promise<boolean> {
       // own hash.
       entry = {
         storedHash: user.password_hash,
-        promise: verifyPassword(DEMO_ADMIN_PASS, user.password_hash).catch(() => false),
+        promise: verifyPassword(DEMO_ADMIN_PASS, user.password_hash),
       };
       demoHintEntry = entry;
     }
     return await entry.promise;
   } catch {
-    demoHintEntry = null;
+    // Operational failure (e.g. transient scrypt error): hide the hint for
+    // this request but allow the next request to retry. Clear the memo only
+    // if it still holds this exact pending pass — a newer completed verdict
+    // for the same hash must be preserved.
+    if (demoHintEntry && demoHintEntry.promise === entry?.promise) {
+      demoHintEntry = null;
+    }
     return false;
   }
 }

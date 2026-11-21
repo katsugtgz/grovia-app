@@ -4,7 +4,7 @@ import {
   addWaitlistEntry,
   getWaitlist,
   getWaitlistCount,
-  isProductionDemoAdminBlocked,
+  isRosterAdminSession,
 } from '@/lib/db';
 import { methodNotAllowed, parseJsonBody } from '@/lib/api-helpers';
 import { requireAuth } from '@/lib/auth';
@@ -15,7 +15,10 @@ export async function GET(request: Request): Promise<Response> {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
 
-  if (auth.user.role !== 'admin' || isProductionDemoAdminBlocked(auth.user.email)) {
+  // Same single admin policy as the roster API and workspace shell: admin
+  // role plus the private-mode/demo-mode identity checks — no divergent
+  // secondary path.
+  if (!isRosterAdminSession(auth.user)) {
     return NextResponse.json(
       { success: false, error: 'Forbidden' },
       {

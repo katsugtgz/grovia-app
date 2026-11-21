@@ -1,3 +1,5 @@
+import { isAdminCredentialGateActive } from './admin-mode';
+
 export const SESSION_COOKIE_NAME = 'grovia_session';
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24; // 86400s (24h)
 export const DEFAULT_AUTH_REDIRECT = '/workspace';
@@ -15,6 +17,13 @@ export interface SessionPayload extends SessionUser {
   iat: number;
   exp: number;
   jti?: string;
+  /**
+   * Credential-version stamp (HMAC, truncated to 128 bits). Present only on
+   * sessions signed while private admin mode was active; lets the verifier
+   * reject demo-era administrator sessions after a deployment switches to a
+   * private `ADMIN_PASSWORD` under an unchanged signing secret.
+   */
+  cred?: string;
 }
 
 const textEncoder = new TextEncoder();
@@ -104,6 +113,52 @@ function toArrayBufferBytes(input: Uint8Array): Uint8Array<ArrayBuffer> {
   return out;
 }
 
+const CRED_VERSION_DOMAIN = 'grovia.session.cred.v1';
+
+/**
+ * Domain-separated, secret-keyed credential-version stamp for private-mode
+ * deployments, covering the full normalized credential configuration (mode +
+ * configured admin identity + configured password). Structured length-prefixed
+ * encode under the signing secret; the stamp is a truncated (128-bit) HMAC —
+ * no credential material, digest, or email is exposed in any claim. Computed
+ * per call (two cheap crypto ops): never cached, so any config change takes
+ * effect immediately with no invalidation key to grow stale.
+ */
+async function currentCredentialVersion(): Promise<string> {
+  const password = process.env.ADMIN_PASSWORD ?? '';
+  const email = (process.env.ADMIN_EMAIL ?? '').trim().toLowerCase();
+  const encode = (field: string): Uint8Array<ArrayBuffer> => {
+    const bytes = textEncoder.encode(field);
+    const out = new Uint8Array(new ArrayBuffer(4 + bytes.byteLength));
+    new DataView(out.buffer).setUint32(0, bytes.byteLength, false);
+    out.set(bytes, 4);
+    return out;
+  };
+  // HMAC key = the signing secret itself; message = length-prefixed domain,
+  // mode, and normalized credential config.
+  const message = concatBytes([
+    encode(CRED_VERSION_DOMAIN),
+    encode('private-admin'),
+    encode(email),
+    encode(password),
+  ]);
+  const mac = new Uint8Array(
+    await crypto.subtle.sign('HMAC', await getSigningKey(), toArrayBufferBytes(message))
+  );
+  return toBase64Url(mac.slice(0, 16));
+}
+
+function concatBytes(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
+  const total = parts.reduce((sum, p) => sum + p.byteLength, 0);
+  const out = new Uint8Array(new ArrayBuffer(total));
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.byteLength;
+  }
+  return out;
+}
+
 function getSigningKey(): Promise<CryptoKey> {
   const secret = resolveAuthSecret();
   if (cachedKeyPromise && cachedSecret === secret) {
@@ -173,6 +228,9 @@ export async function signSessionToken(
     exp: now + ttlSeconds,
     jti: generateTokenId(),
   };
+  if (isAdminCredentialGateActive()) {
+    payload.cred = await currentCredentialVersion();
+  }
   const payloadB64 = toBase64Url(textEncoder.encode(JSON.stringify(payload)));
   const key = await getSigningKey();
   const signature = await globalThis.crypto.subtle.sign(
@@ -237,7 +295,20 @@ export async function verifySessionToken(
     if (isSessionTokenRevoked(token, now)) return null;
 
     const jti = typeof parsed.jti === 'string' && parsed.jti.length > 0 ? parsed.jti : undefined;
-    return jti ? { id, email, name, role, iat, exp, jti } : { id, email, name, role, iat, exp };
+
+    // Credential-version gate: in private-mode production, an administrator
+    // session must prove it was issued under the current private credential.
+    // Claim-less tokens are demo-era (or pre-gating) and rejected for the
+    // admin role; member sessions are unaffected. Non-production and demo
+    // mode never gate, so existing flows keep working unchanged.
+    const cred = typeof parsed.cred === 'string' && parsed.cred.length > 0 ? parsed.cred : undefined;
+    if (role === 'admin' && isAdminCredentialGateActive()) {
+      if (!cred || cred !== (await currentCredentialVersion())) {
+        return null;
+      }
+    }
+
+    return cred ? { id, email, name, role, iat, exp, jti, cred } : { id, email, name, role, iat, exp, jti };
   } catch {
     return null;
   }

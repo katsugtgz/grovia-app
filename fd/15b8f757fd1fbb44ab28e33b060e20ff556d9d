@@ -1,0 +1,14 @@
+next.config.ts
+  h_cc1f32aec57e6b 5-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fd15b8f757fd1fbb44ab28e33b060e20ff556d9d",
+  "prompts": {},
+  "humans": {
+    "h_cc1f32aec57e6b": {
+      "author": "Muhammad Naufal Mahdi <053792227@ecampus.ut.ac.id>"
+    }
+  }
+}

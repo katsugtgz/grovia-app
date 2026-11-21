@@ -46,6 +46,14 @@ export function WorkspaceShell({
 
   const appRef = useRef<HTMLElement>(null);
   const requestedViewRef = useRef<ViewType>('overview');
+  const transitionVersionRef = useRef(0);
+  const stopMotionRef = useRef<(() => void) | null>(null);
+
+  const stopViewTransition = useCallback(() => {
+    transitionVersionRef.current += 1;
+    stopMotionRef.current?.();
+    stopMotionRef.current = null;
+  }, []);
 
   // Initialize workspace overview rail state without blocking initial SSR paint
   useEntranceTimeline(appRef);
@@ -73,20 +81,38 @@ export function WorkspaceShell({
   useEffect(() => {
     const handleHash = () => {
       const nextView = normalizeView(window.location.hash);
+      stopViewTransition();
       requestedViewRef.current = nextView;
       setCurrentView(nextView);
     };
 
     handleHash();
     window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
+    return () => {
+      window.removeEventListener('hashchange', handleHash);
+      stopViewTransition();
+    };
+  }, [stopViewTransition]);
 
   // View change handler with coordinated transitions and history sync
   const handleViewChange = useCallback(
     (newView: ViewType) => {
       if (newView === requestedViewRef.current) return;
       requestedViewRef.current = newView;
+      stopViewTransition();
+      const version = transitionVersionRef.current;
+
+      const commitView = () => {
+        setCurrentView(newView);
+        const targetHash = newView === 'overview' ? '' : `#${newView}`;
+        if (window.location.hash !== targetHash) {
+          window.history.replaceState(
+            null,
+            '',
+            targetHash || window.location.pathname + window.location.search
+          );
+        }
+      };
 
       if (typeof window !== 'undefined' && window.scrollY > 0) {
         window.scrollTo({
@@ -96,18 +122,8 @@ export function WorkspaceShell({
       }
 
       const app = appRef.current;
-      if (!app || isReducedMotion()) {
-        setCurrentView(newView);
-        const targetHash = newView === 'overview' ? '' : `#${newView}`;
-        if (window.location.hash !== targetHash) {
-          window.history.replaceState(
-            null,
-            '',
-            newView === 'overview'
-              ? window.location.pathname + window.location.search
-              : `#${newView}`
-          );
-        }
+      if (!app || newView === currentView || isReducedMotion()) {
+        commitView();
         return;
       }
 
@@ -115,7 +131,20 @@ export function WorkspaceShell({
       const activePanel = app.querySelector(`.view[data-view-panel="${currentView}"]`);
       const exitEls = activePanel?.querySelectorAll('[data-card], .hello, .view__head');
 
-      const tl = gsap.timeline();
+      const tl = gsap.timeline({ paused: true });
+      let entranceFrame: number | undefined;
+      let entrance: gsap.Context | undefined;
+      let exitReverted = false;
+      const restoreExit = () => {
+        if (exitReverted) return;
+        exitReverted = true;
+        tl.revert();
+      };
+      stopMotionRef.current = () => {
+        if (entranceFrame !== undefined) cancelAnimationFrame(entranceFrame);
+        entrance?.revert();
+        restoreExit();
+      };
 
       if (exitEls && exitEls.length) {
         tl.to(exitEls, {
@@ -128,53 +157,48 @@ export function WorkspaceShell({
       }
 
       tl.add(() => {
-        setCurrentView(newView);
-        const targetHash = newView === 'overview' ? '' : `#${newView}`;
-        if (window.location.hash !== targetHash) {
-          window.history.replaceState(
-            null,
-            '',
-            newView === 'overview'
-              ? window.location.pathname + window.location.search
-              : `#${newView}`
-          );
-        }
+        if (version !== transitionVersionRef.current) return;
+        commitView();
 
-        // Entrance animation for incoming view
-        requestAnimationFrame(() => {
+        entranceFrame = requestAnimationFrame(() => {
+          if (version !== transitionVersionRef.current) return;
+          restoreExit();
           const incomingPanel = app.querySelector(`.view[data-view-panel="${newView}"]`);
-          if (!incomingPanel) return;
+          if (!incomingPanel || isReducedMotion()) return;
 
-          const incomingCards = incomingPanel.querySelectorAll('[data-card]');
-          const incomingHead = incomingPanel.querySelector('.hello, .view__head');
+          entrance = gsap.context(() => {
+            const incomingCards = incomingPanel.querySelectorAll('[data-card]');
+            const incomingHead = incomingPanel.querySelector('.hello, .view__head');
 
-          if (incomingHead) {
-            gsap.fromTo(
-              incomingHead,
-              { opacity: 0, y: 14 },
-              { opacity: 1, y: 0, duration: $(0.5), ease: 'power3.out', clearProps: 'transform,opacity' }
-            );
-          }
+            if (incomingHead) {
+              gsap.fromTo(
+                incomingHead,
+                { opacity: 0, y: 14 },
+                { opacity: 1, y: 0, duration: $(0.5), ease: 'power3.out', clearProps: 'transform,opacity' }
+              );
+            }
 
-          if (incomingCards.length) {
-            gsap.fromTo(
-              incomingCards,
-              { opacity: 0, y: 34, scale: 0.985 },
-              {
-                opacity: 1,
-                y: 0,
-                scale: 1,
-                duration: $(0.8),
-                ease: 'power3.out',
-                stagger: $(0.07),
-                clearProps: 'transform,opacity',
-              }
-            );
-          }
+            if (incomingCards.length) {
+              gsap.fromTo(
+                incomingCards,
+                { opacity: 0, y: 34, scale: 0.985 },
+                {
+                  opacity: 1,
+                  y: 0,
+                  scale: 1,
+                  duration: $(0.8),
+                  ease: 'power3.out',
+                  stagger: $(0.07),
+                  clearProps: 'transform,opacity',
+                }
+              );
+            }
+          }, incomingPanel);
         });
       });
+      tl.play();
     },
-    [currentView]
+    [currentView, stopViewTransition]
   );
 
   const handleSaveSettings = (name: string, day: number) => {

@@ -1,11 +1,11 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { SEED_PEOPLE } from '@/lib/seed-people';
 import {
   isSameServerOrigin,
   startLiveServer,
   type LiveServerHandle,
 } from '../../harness/live-http';
 import { createRandomEmail, fixtures } from '../../harness/fixtures';
+import { assertNoSeedPeoplePii } from '../../harness/pii';
 
 interface HealthResponse {
   status: string;
@@ -32,29 +32,6 @@ interface ErrorResponse {
   error: string;
 }
 
-const SENSITIVE_NAMES: readonly string[] = SEED_PEOPLE.map((person) => person.name);
-
-const SENSITIVE_EMAILS: readonly string[] = [
-  ...SEED_PEOPLE.map((person) => person.email).filter(
-    (email): email is string => typeof email === 'string' && email.length > 0
-  ),
-  'alex@innovate.io',
-  'elena@quantum.tech',
-  'marcus@hypergrowth.co',
-  'sarah@vertex.io',
-  'liam@finscale.org',
-  'chloe@nexus.co',
-];
-
-const PAYROLL_LEAK_MARKERS = [
-  '$4,850',
-  'Not provided (demo)',
-  'Payslip-09',
-  'Contract.pdf',
-] as const;
-
-const RATE_PAYLOAD_PATTERN = /["']?rate["']?\s*:\s*(3[6-9]|4[0-7])\b/;
-
 let server: LiveServerHandle | undefined;
 
 function getServer(): LiveServerHandle {
@@ -62,19 +39,6 @@ function getServer(): LiveServerHandle {
     throw new Error('Live test server is not initialized');
   }
   return server;
-}
-
-function assertNoSensitivePii(content: string): void {
-  for (const name of SENSITIVE_NAMES) {
-    expect(content).not.toContain(name);
-  }
-  for (const email of SENSITIVE_EMAILS) {
-    expect(content).not.toContain(email);
-  }
-  for (const marker of PAYROLL_LEAK_MARKERS) {
-    expect(content).not.toContain(marker);
-  }
-  expect(RATE_PAYLOAD_PATTERN.test(content)).toBe(false);
 }
 
 describe('Tier 4 — Live HTTP Scenario: Public Visitor Landing & PII Audit (T4.v2.1)', () => {
@@ -95,7 +59,7 @@ describe('Tier 4 — Live HTTP Scenario: Public Visitor Landing & PII Audit (T4.
     expect(landingRes.headers.get('content-type') ?? '').toContain('text/html');
     expect(landingRes.text).toContain('<header');
     expect(landingRes.text).toContain('<main');
-    assertNoSensitivePii(landingRes.text);
+    assertNoSeedPeoplePii(landingRes.text);
 
     const healthRes = await visitor.get<HealthResponse>('/api/health');
     expect(healthRes.status).toBe(200);
@@ -150,7 +114,7 @@ describe('Tier 4 — Live HTTP Scenario: Public Visitor Landing & PII Audit (T4.
     for (const scriptPath of scriptUrls) {
       const chunkRes = await visitor.get(scriptPath);
       expect(chunkRes.status).toBe(200);
-      assertNoSensitivePii(chunkRes.text);
+      assertNoSeedPeoplePii(chunkRes.text);
     }
   });
 
@@ -165,7 +129,7 @@ describe('Tier 4 — Live HTTP Scenario: Public Visitor Landing & PII Audit (T4.
     expect(isSameServerOrigin(loc, live.baseUrl)).toBe(true);
     expect(loc.pathname).toBe('/login');
     expect(loc.searchParams.get('next')).toBe('/workspace');
-    assertNoSensitivePii(wsRes.text);
+    assertNoSeedPeoplePii(wsRes.text);
 
     const blockedReads = [
       '/api/waitlist',

@@ -1,40 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { createRandomEmail, fixtures } from '../../harness/fixtures';
 import { startLiveServer, type LiveServerHandle } from '../../harness/live-http';
+import { assertNoSeedPeoplePii } from '../../harness/pii';
 
 interface ErrorBody {
   success: boolean;
   error: string;
 }
-
-const INITIAL_PEOPLE_NAMES = Array.from(
-  { length: 10 },
-  (_, index) => `Demo Person ${String(index + 1).padStart(2, '0')}`
-);
-
-const INITIAL_PEOPLE_EMAILS = Array.from(
-  { length: 10 },
-  (_, index) => `person${String(index + 1).padStart(2, '0')}@example.invalid`
-);
-
-const SEEDED_WAITLIST_AND_INQUIRY_EMAILS = [
-  'alex@innovate.io',
-  'elena@quantum.tech',
-  'marcus@hypergrowth.co',
-  'sarah@vertex.io',
-  'liam@finscale.org',
-  'chloe@nexus.co',
-];
-
-const PAYROLL_AND_RATE_MARKERS = [
-  '$4,850',
-  'Payslip-09',
-  'Contract.pdf',
-  'Not provided (demo)',
-  ...Array.from({ length: 10 }, (_, idx) => `"rate":${38 + idx}`),
-  '"rate":36',
-  '"rate":37',
-];
 
 function extractStaticScriptPaths(html: string): string[] {
   const paths = new Set<string>();
@@ -71,22 +43,14 @@ afterAll(async () => {
 
 describe('Tier 2 — F1 Boundaries: Landing PII Exclusion, Waitlist Validation & Public Method Guards', () => {
   test(
-    'T2.v2.1.1: Unauthenticated GET / HTML contains zero INITIAL_PEOPLE names/emails and zero seeded waitlist/inquiry emails',
+    'T2.v2.1.1: Unauthenticated GET / HTML contains no employee PII or legacy waitlist/inquiry emails',
     async () => {
       const client = getServer().createClient();
       const res = await client.get<string>('/');
 
       expect(res.status).toBe(200);
 
-      for (const name of INITIAL_PEOPLE_NAMES) {
-        expect(res.text).not.toContain(name);
-      }
-      for (const email of INITIAL_PEOPLE_EMAILS) {
-        expect(res.text).not.toContain(email);
-      }
-      for (const email of SEEDED_WAITLIST_AND_INQUIRY_EMAILS) {
-        expect(res.text).not.toContain(email);
-      }
+      assertNoSeedPeoplePii(res.text);
     },
     { timeout: 15_000 }
   );
@@ -98,9 +62,7 @@ describe('Tier 2 — F1 Boundaries: Landing PII Exclusion, Waitlist Validation &
       const htmlRes = await client.get<string>('/');
       expect(htmlRes.status).toBe(200);
 
-      for (const marker of PAYROLL_AND_RATE_MARKERS) {
-        expect(htmlRes.text).not.toContain(marker);
-      }
+      assertNoSeedPeoplePii(htmlRes.text);
 
       const scriptPaths = extractStaticScriptPaths(htmlRes.text);
       expect(scriptPaths.length).toBeGreaterThan(0);
@@ -111,12 +73,7 @@ describe('Tier 2 — F1 Boundaries: Landing PII Exclusion, Waitlist Validation &
 
       for (const asset of assets) {
         expect(asset.status).toBe(200);
-        for (const marker of PAYROLL_AND_RATE_MARKERS) {
-          expect(asset.text).not.toContain(marker);
-        }
-        for (const name of INITIAL_PEOPLE_NAMES) {
-          expect(asset.text).not.toContain(name);
-        }
+        assertNoSeedPeoplePii(asset.text);
         expect(asset.text).not.toContain('@example.invalid');
       }
     },

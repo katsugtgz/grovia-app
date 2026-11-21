@@ -115,7 +115,7 @@ export function LandingHeader() {
           <Icon name="key" className="ico" aria-hidden="true" />
           Sign in
         </Link>
-        <Link className="dark-btn" href="/workspace">
+        <Link className="dark-btn" href="/workspace" prefetch={false}>
           Open Workspace
           <Icon name="arrow-ur" className="ico" aria-hidden="true" />
         </Link>

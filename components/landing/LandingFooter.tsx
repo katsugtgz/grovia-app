@@ -22,7 +22,7 @@ export function LandingFooter() {
         <Link className="landing-footer__link" href="/login">
           Sign in
         </Link>
-        <Link className="landing-footer__link" href="/workspace">
+        <Link className="landing-footer__link" href="/workspace" prefetch={false}>
           Workspace
         </Link>
       </div>

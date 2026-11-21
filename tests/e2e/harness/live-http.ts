@@ -793,21 +793,18 @@ async function ensureProductionBuild(
         const stdoutDrain = drainStream(proc.stdout, '[build:out] ', logBuffer);
         const stderrDrain = drainStream(proc.stderr, '[build:err] ', logBuffer);
 
-        let timedOut = false;
-        const timer = setTimeout(() => {
-          timedOut = true;
-          try {
-            proc.kill('SIGTERM');
-          } catch {
-            // Ignore kill errors
-          }
-        }, buildTimeoutMs);
+        const { promise: buildDeadline, resolve: expireBuild } = Promise.withResolvers<'timeout'>();
+        const timer = setTimeout(() => expireBuild('timeout'), buildTimeoutMs);
 
         try {
-          const exitCode = await proc.exited;
-          await Promise.allSettled([stdoutDrain.done, stderrDrain.done]);
+          const completed = proc.exited.then(async (exitCode) => {
+            await Promise.allSettled([stdoutDrain.done, stderrDrain.done]);
+            return exitCode;
+          });
+          const exitCode = await Promise.race([completed, buildDeadline]);
 
-          if (timedOut) {
+          if (exitCode === 'timeout') {
+            await terminateProcess(proc, stdoutDrain, stderrDrain);
             throw new Error(
               `Next.js production build timed out after ${buildTimeoutMs}ms.\n${logBuffer.toString()}`
             );
@@ -925,7 +922,7 @@ async function waitForHealth(
 }
 
 async function terminateProcess(
-  proc: ReturnType<typeof Bun.spawn>,
+  proc: Bun.Subprocess,
   stdoutDrain: StreamDrainHandle,
   stderrDrain: StreamDrainHandle
 ): Promise<void> {
@@ -935,32 +932,30 @@ async function terminateProcess(
     // Process may already be dead
   }
 
-  let killTimer: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<'timeout'>((resolve) => {
-    killTimer = setTimeout(() => resolve('timeout'), 3000);
-  });
-
-  const exitedPromise = proc.exited.then(() => 'exited' as const);
-  const outcome = await Promise.race([exitedPromise, timeoutPromise]);
-
-  if (killTimer !== undefined) {
-    clearTimeout(killTimer);
-  }
-
-  if (outcome === 'timeout') {
-    try {
-      proc.kill('SIGKILL');
-    } catch {
-      // Ignore kill errors
+  const { promise: gracePeriod, resolve: expireGrace } = Promise.withResolvers<'timeout'>();
+  const killTimer = setTimeout(() => expireGrace('timeout'), 3000);
+  try {
+    const outcome = await Promise.race([proc.exited.then(() => 'exited' as const), gracePeriod]);
+    if (outcome === 'timeout') {
+      try {
+        proc.kill('SIGKILL');
+      } catch {
+        // Process may have exited after the grace period.
+      }
+      await proc.exited;
     }
-    await proc.exited.catch(() => {});
+  } finally {
+    clearTimeout(killTimer);
+    await Promise.allSettled([stdoutDrain.cancel(), stderrDrain.cancel()]);
   }
 
-  await Promise.allSettled([stdoutDrain.cancel(), stderrDrain.cancel()]);
-  await Promise.race([
-    Promise.allSettled([stdoutDrain.done, stderrDrain.done]),
-    new Promise<void>((resolve) => setTimeout(resolve, 250)),
-  ]);
+  const { promise: drainDeadline, resolve: expireDrain } = Promise.withResolvers<void>();
+  const drainTimer = setTimeout(expireDrain, 250);
+  try {
+    await Promise.race([Promise.allSettled([stdoutDrain.done, stderrDrain.done]), drainDeadline]);
+  } finally {
+    clearTimeout(drainTimer);
+  }
 }
 
 function parsePortFromUrl(urlStr: string): number {

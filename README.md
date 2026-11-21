@@ -144,6 +144,8 @@ bun run dev
 
 Open [http://localhost:3000](http://localhost:3000) for the public landing page. Sign in at [http://localhost:3000/login](http://localhost:3000/login) with your configured admin credentials, or use the default demo credentials above if the login page displays them. The authenticated workspace at [http://localhost:3000/workspace](http://localhost:3000/workspace) uses `grovia.db` (`bun:sqlite`).
 
+**Production admin sign-in:** Set a valid private `ADMIN_PASSWORD`, or set `ALLOW_DEMO_ADMIN=1` only for an intentional demo. Private admin access is scoped to the configured `ADMIN_EMAIL`. Existing admin sessions may require signing in again after this update or a credential change.
+
 ### Scripts & Quality Gates
 
 | Command | Purpose |

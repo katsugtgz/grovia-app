@@ -88,6 +88,15 @@ function isPlainObject(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// The largest next-ID value an allocator may consume. The loader accepts one
+// value above it — the restart-safe sentinel MAX_SAFE_INTEGER-1 — so an
+// operator-preserving load never blocks legitimate rows, but every allocator
+// refuses to allocate from it: any increment would persist MAX_SAFE_INTEGER,
+// which the loader rejects. Guard BEFORE mutation.
+function canAllocateNextId(counter: number): boolean {
+  return counter <= Number.MAX_SAFE_INTEGER - 2;
+}
+
 declare global {
   // eslint-disable-next-line no-var
   var __grovia_db__: Database | undefined;
@@ -233,7 +242,16 @@ function getDummyStores(): DummyStores {
           }
           for (const key of STORE_COUNTER_KEYS) {
             const value = parsed[key];
-            if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+            // MAX_SAFE_INTEGER fails load outright. MAX_SAFE_INTEGER-1 is the
+            // restart-safe sentinel: accepted here, but every allocator
+            // refuses to consume it, so no increment can ever persist a
+            // counter this loader would reject.
+            if (
+              typeof value !== 'number' ||
+              !Number.isSafeInteger(value) ||
+              value <= 0 ||
+              value === Number.MAX_SAFE_INTEGER
+            ) {
               badParts.push(key);
             }
           }
@@ -327,6 +345,40 @@ function getDummyStores(): DummyStores {
                   badParts.push(`${key}[${index}]`);
                 }
               });
+            }
+
+            // Uniqueness mirrors the SQL schema's PRIMARY KEY and UNIQUE
+            // constraints: ids per store (any type), emails compared
+            // case-insensitively with the same normalization stored-email
+            // lookups use, inquiry ticket keys exact. Reports store/field/index
+            // only — raw emails and ticket keys never reach the error.
+            if (badParts.length === 0) {
+              const dupParts: string[] = [];
+              const collect = (
+                key: (typeof STORE_ARRAY_KEYS)[number],
+                uniqueKey: 'email' | 'ticket_id'
+              ): void => {
+                const ids = new Set<unknown>();
+                const uniques = new Set<string>();
+                (parsed[key] as unknown[]).forEach((row, index) => {
+                  const record = row as UnknownRecord;
+                  if (ids.has(record.id)) dupParts.push(`${key}[${index}].id`);
+                  ids.add(record.id);
+                  const raw = String(record[uniqueKey]);
+                  const normalized = uniqueKey === 'email' ? raw.toLowerCase() : raw;
+                  if (uniques.has(normalized)) dupParts.push(`${key}[${index}].${uniqueKey}`);
+                  uniques.add(normalized);
+                });
+              };
+              collect('waitlist', 'email');
+              collect('inquiries', 'ticket_id');
+              collect('users', 'email');
+              collect('people', 'email');
+              if (dupParts.length > 0) {
+                throw new Error(
+                  `Data snapshot at ${snapshotPath} is malformed (duplicate: ${dupParts.slice(0, 8).join(',')}${dupParts.length > 8 ? ',…' : ''}); refusing to overwrite it with seed data.`
+                );
+              }
             }
           }
         }
@@ -466,6 +518,11 @@ function getDatabaseConstructor(): typeof Database {
                   throw new Error('UNIQUE constraint failed: waitlist.email');
                 }
                 const prevNextId = stores.nextWaitlistId;
+                if (!canAllocateNextId(prevNextId)) {
+                  throw new Error(
+                    'waitlist ID counter exhausted (MAX_SAFE_INTEGER); refusing allocation'
+                  );
+                }
                 const id = stores.nextWaitlistId++;
                 stores.waitlist.push({
                   id,
@@ -492,6 +549,11 @@ function getDatabaseConstructor(): typeof Database {
                   throw new Error('UNIQUE constraint failed: inquiries.ticket_id');
                 }
                 const prevNextId = stores.nextInquiryId;
+                if (!canAllocateNextId(prevNextId)) {
+                  throw new Error(
+                    'inquiries ID counter exhausted (MAX_SAFE_INTEGER); refusing allocation'
+                  );
+                }
                 const id = stores.nextInquiryId++;
                 stores.inquiries.push({
                   id,
@@ -521,6 +583,11 @@ function getDatabaseConstructor(): typeof Database {
                   throw new Error('UNIQUE constraint failed: users.email');
                 }
                 const prevNextId = stores.nextUserId;
+                if (!canAllocateNextId(prevNextId)) {
+                  throw new Error(
+                    'users ID counter exhausted (MAX_SAFE_INTEGER); refusing allocation'
+                  );
+                }
                 const id = stores.nextUserId++;
                 stores.users.push({
                   id,
@@ -1101,8 +1168,25 @@ export function initDatabase(dbPath?: string): Database {
 
   const DbConstructor = getDatabaseConstructor();
   const database = new DbConstructor(targetPath, { create: true });
-  configurePragmas(database);
-  initSchema(database);
+  try {
+    configurePragmas(database);
+    initSchema(database);
+  } catch (initErr) {
+    // A half-initialized handle (WAL pragma failed through, some DDL applied)
+    // must not leak: close it and surface the ORIGINAL error — a close()
+    // failure during unwind is secondary, never a replacement. Failure also
+    // releases the claimed path and re-drops the snapshot cache: seeding that
+    // threw mid-way may already have re-populated the stores, and the path
+    // published above never belonged to an open database.
+    try {
+      database.close();
+    } catch {
+      // Ignore secondary close failure
+    }
+    globalThis.__grovia_dummy_stores__ = undefined;
+    globalThis.__grovia_db_path__ = undefined;
+    throw initErr;
+  }
 
   globalThis.__grovia_db__ = database;
   return database;

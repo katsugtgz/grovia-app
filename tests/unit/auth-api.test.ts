@@ -1281,9 +1281,29 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       try {
         process.env.ADMIN_EMAIL = 'member-admin@grovia.io';
         process.env.ADMIN_PASSWORD = 'new-private-password';
-        expect(() => initDatabase(tempDbPath)).toThrow(
-          /Refusing admin seeding: non-admin user already exists/
-        );
+
+        // Observe the unwind on the REAL Bun SQLite handle: patch the shared
+        // Database.prototype.close, scoped to this probe and restored in
+        // finally. closeDb() first leaves no cached handle, so the only close
+        // initDatabase can perform here is the failed handle's.
+        closeDb();
+        const proto = Object.getPrototypeOf(db) as unknown as {
+          close: (this: unknown, ...args: unknown[]) => unknown;
+        };
+        const origClose = proto.close;
+        let unwoundCloses = 0;
+        proto.close = function (this: unknown, ...args: unknown[]) {
+          unwoundCloses += 1;
+          return origClose.apply(this, args);
+        };
+        try {
+          expect(() => initDatabase(tempDbPath)).toThrow(
+            /Refusing admin seeding: non-admin user already exists/
+          );
+          expect(unwoundCloses).toBe(1);
+        } finally {
+          proto.close = origClose;
+        }
 
         // The refused init leaves the module cold (no cached handle/snapshot
         // rows); with ambient config restored, re-opening succeeds and shows
@@ -1467,6 +1487,95 @@ const check = (name, cond) => { if (!cond) { console.error('FAIL ' + name); fail
   let seeded = false;
   try { db.initDatabase(path.join(dir, 'good.db')); seeded = true; } catch { seeded = false; }
   check('valid snapshot loads', seeded);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// Overflow counters: MAX_SAFE_INTEGER fails load outright; the
+// MAX_SAFE_INTEGER-1 sentinel loads restart-safe but every allocator refuses
+// allocation without mutating stores or counters (a duplicate insert still
+// no-ops without allocating).
+{
+  const dir = fs.mkdtempSync(path.join(osMod.tmpdir(), 'p6-'));
+  const base = { waitlist: [], inquiries: [], users: [], people: [], nextWaitlistId: 1, nextInquiryId: 1, nextUserId: 1 };
+  const writeSnap = (name, obj) => fs.writeFileSync(path.join(dir, name + '.db.store.json'), JSON.stringify(obj), 'utf8');
+  const waitlistRow = (id, email) => ({ id, name: 'n', email, company: null, teamSize: null, useCase: null, status: 'active', createdAt: '2026-11-16 00:00:00' });
+
+  writeSnap('maxsnap', { ...base, waitlist: [waitlistRow(1, 'w@x.invalid')], nextWaitlistId: Number.MAX_SAFE_INTEGER });
+  const maxsnapBytes = JSON.stringify({ ...base, waitlist: [waitlistRow(1, 'w@x.invalid')], nextWaitlistId: Number.MAX_SAFE_INTEGER });
+  process.env.DB_PATH = path.join(dir, 'maxsnap.db');
+  let threw = false;
+  try { db.initDatabase(path.join(dir, 'maxsnap.db')); } catch { threw = true; }
+  check('MAX_SAFE_INTEGER counter fails load', threw);
+  check('maxsnap bytes untouched', fs.readFileSync(path.join(dir, 'maxsnap.db.store.json'), 'utf8') === maxsnapBytes);
+
+  writeSnap('sentinel', { ...base, waitlist: [waitlistRow(1, 'w@x.invalid')], nextWaitlistId: Number.MAX_SAFE_INTEGER - 1 });
+  process.env.DB_PATH = path.join(dir, 'sentinel.db');
+  let loadOk = false;
+  try { db.initDatabase(path.join(dir, 'sentinel.db')); loadOk = true; } catch {}
+  check('MAX_SAFE_INTEGER-1 sentinel loads', loadOk);
+  let allocThrew = false;
+  try { db.addWaitlistEntry({ name: 'O', email: 'of@x.invalid', company: 'Co', teamSize: '1-10', useCase: 't' }); } catch { allocThrew = true; }
+  check('allocation at sentinel throws', allocThrew);
+  const after = JSON.parse(fs.readFileSync(path.join(dir, 'sentinel.db.store.json'), 'utf8'));
+  check('counter unchanged after refusal', after.nextWaitlistId === Number.MAX_SAFE_INTEGER - 1);
+  check('no row leaked past refusal', after.waitlist.length === 1);
+  let dupThrew = false;
+  try { db.addWaitlistEntry({ name: 'D', email: 'W@X.invalid', company: 'Co', teamSize: '1-10', useCase: 't' }); } catch { dupThrew = true; }
+  check('duplicate insert at sentinel no-ops', !dupThrew);
+  const afterDup = JSON.parse(fs.readFileSync(path.join(dir, 'sentinel.db.store.json'), 'utf8'));
+  check('duplicate unchanged', afterDup.waitlist.length === 1 && afterDup.nextWaitlistId === Number.MAX_SAFE_INTEGER - 1);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// Snapshot duplicates mirror SQL uniqueness: numeric ids per store, emails
+// case-insensitive, inquiry ticket keys exact. Rejected before global
+// publish; the same email across DIFFERENT stores stays valid.
+{
+  const dir = fs.mkdtempSync(path.join(osMod.tmpdir(), 'p7-'));
+  process.env.NODE_ENV = 'development';
+  const base = { waitlist: [], inquiries: [], users: [], people: [], nextWaitlistId: 2, nextInquiryId: 2, nextUserId: 2 };
+  const writeSnap = (name, obj) => fs.writeFileSync(path.join(dir, name + '.db.store.json'), JSON.stringify(obj), 'utf8');
+  const lastError = {};
+  const loadThrows = (name) => {
+    process.env.DB_PATH = path.join(dir, name + '.db');
+    try { db.initDatabase(path.join(dir, name + '.db')); return false; } catch (e) { lastError[name] = String(e && e.message); return true; }
+  };
+  const lastErrorMentions = (name, needle) => (lastError[name] || '').includes(needle);
+  const waitlistRow = (id, email) => ({ id, name: 'n', email, company: null, teamSize: null, useCase: null, status: 'active', createdAt: '2026-11-16 00:00:00' });
+  const inquiryRow = (id, ticket) => ({ id, ticket_id: ticket, ticketId: ticket, name: 'n', email: 'inq@x.invalid', subject: 's', message: 'm', priority: 'low', status: 'new', created_at: '2026-11-16 00:00:00', updated_at: '2026-11-16 00:00:00' });
+  const userRow = (id, email) => ({ id, email, name: 'n', role: 'member', password_hash: 'x', created_at: '2026-11-16 00:00:00' });
+  const peopleRow = (id, email) => ({ id, name: 'n', role: 'Eng', team: 'T', city: 'Remote', hire_date: '2024-01-01', since: 'Invited today', status: 'Active', av: '#e9c98f', rate: 40, email, phone: null, bday: null, look_json: null, created_at: '2026-11-16 00:00:00' });
+
+  writeSnap('dupwait', { ...base, waitlist: [waitlistRow(1, 'w1@x.invalid'), waitlistRow(1, 'w2@x.invalid')], nextWaitlistId: 2 });
+  check('duplicate waitlist id throws', loadThrows('dupwait'));
+  check('dupwait rejection is id-specific', lastErrorMentions('dupwait', 'waitlist[1].id'));
+  writeSnap('dupwaitemail', { ...base, nextWaitlistId: 3, waitlist: [waitlistRow(1, 'w@x.invalid'), waitlistRow(2, 'W@X.INVALID')] });
+  check('case-insensitive duplicate waitlist email throws', loadThrows('dupwaitemail'));
+  check('dupwaitemail rejection is email-specific', lastErrorMentions('dupwaitemail', 'waitlist[1].email'));
+  check('dupwaitemail hides raw email', !lastErrorMentions('dupwaitemail', 'w@x.invalid') && !lastErrorMentions('dupwaitemail', 'W@X.INVALID'));
+  writeSnap('dupinq', { ...base, inquiries: [inquiryRow(1, 'GROV-1001'), inquiryRow(1, 'GROV-1002')], nextInquiryId: 3 });
+  check('duplicate inquiry id throws', loadThrows('dupinq'));
+  check('dupinq rejection is id-specific', lastErrorMentions('dupinq', 'inquiries[1].id'));
+  writeSnap('dupticket', { ...base, inquiries: [inquiryRow(1, 'GROV-1001'), inquiryRow(2, 'GROV-1001')], nextInquiryId: 3 });
+  check('duplicate ticket key throws', loadThrows('dupticket'));
+  check('dupticket rejection is ticket-specific', lastErrorMentions('dupticket', 'inquiries[1].ticket_id'));
+  writeSnap('dupuser', { ...base, users: [userRow(1, 'u1@x.invalid'), userRow(1, 'u2@x.invalid')], nextUserId: 2 });
+  check('duplicate user id throws', loadThrows('dupuser'));
+  check('dupuser rejection is id-specific', lastErrorMentions('dupuser', 'users[1].id'));
+  writeSnap('dupuseremail', { ...base, users: [userRow(1, 'u@x.invalid'), userRow(2, 'U@X.invalid')], nextUserId: 3 });
+  check('case-insensitive duplicate user email throws', loadThrows('dupuseremail'));
+  check('dupuseremail rejection is email-specific', lastErrorMentions('dupuseremail', 'users[1].email'));
+  writeSnap('duppeople', { ...base, people: [peopleRow('1', 'p@x.invalid'), peopleRow('1', 'p2@x.invalid')], nextUserId: 3 });
+  check('duplicate people id throws', loadThrows('duppeople'));
+  check('duppeople rejection is id-specific', lastErrorMentions('duppeople', 'people[1].id'));
+  writeSnap('duppeopleemail', { ...base, people: [peopleRow('1', 'p@x.invalid'), peopleRow('2', 'P@X.invalid')], nextUserId: 3 });
+  check('case-insensitive duplicate people email throws', loadThrows('duppeopleemail'));
+  check('duppeopleemail rejection is email-specific', lastErrorMentions('duppeopleemail', 'people[1].email'));
+  writeSnap('shared', { ...base, waitlist: [waitlistRow(1, 'shared@x.invalid')], users: [userRow(1, 'shared@x.invalid')], people: [peopleRow('1', 'shared@x.invalid')], inquiries: [inquiryRow(1, 'GROV-1001')] });
+  check('cross-store shared email stays valid', !loadThrows('shared'));
+  // Byte-intact representative: failed duplicate load never rewrites file.
+  const dupBytes = fs.readFileSync(path.join(dir, 'dupuser.db.store.json'), 'utf8');
+  check('duplicate snapshot bytes intact', dupBytes === JSON.stringify({ ...base, users: [userRow(1, 'u1@x.invalid'), userRow(1, 'u2@x.invalid')], nextUserId: 2 }));
   fs.rmSync(dir, { recursive: true, force: true });
 }
 

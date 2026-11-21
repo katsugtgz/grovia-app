@@ -105,12 +105,12 @@ export function LoginForm({
     try {
       const result = await submitLoginRequest(email, password);
       if (result.ok) {
-        redirected = true;
         const target = resolveSafeNext(nextPath);
         if (onSuccess) {
           onSuccess(target);
         } else {
           window.location.assign(target);
+          redirected = true;
         }
         return;
       }

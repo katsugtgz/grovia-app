@@ -55,6 +55,7 @@ export function InviteFormFields({
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
+          disabled={isSubmitting}
           aria-invalid={!!errors.name}
           aria-describedby={errors.name ? 'invite-form-name-error' : undefined}
         />
@@ -78,6 +79,7 @@ export function InviteFormFields({
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          disabled={isSubmitting}
           aria-invalid={!!errors.email}
           aria-describedby={errors.email ? 'invite-form-email-error' : undefined}
         />
@@ -101,6 +103,7 @@ export function InviteFormFields({
             required
             value={role}
             onChange={(e) => setRole(e.target.value)}
+            disabled={isSubmitting}
             aria-invalid={!!errors.role}
             aria-describedby={errors.role ? 'invite-form-role-error' : undefined}
           />
@@ -119,6 +122,7 @@ export function InviteFormFields({
             name="team"
             value={team}
             onChange={(e) => setTeam(e.target.value)}
+            disabled={isSubmitting}
           >
             {PEOPLE_TEAMS.map((teamOption) => (
               <option key={teamOption} value={teamOption}>
@@ -141,6 +145,7 @@ export function InviteFormFields({
           placeholder="Remote"
           value={city}
           onChange={(e) => setCity(e.target.value)}
+          disabled={isSubmitting}
         />
       </label>
 

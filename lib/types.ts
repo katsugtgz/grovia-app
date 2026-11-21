@@ -234,7 +234,7 @@ export interface TemplateSettings {
 }
 
 // ==========================================
-// Auth & People API Contracts (M1)
+// Auth & People API Contracts (M6)
 // ==========================================
 
 export interface AuthUser {

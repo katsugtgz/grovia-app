@@ -8,6 +8,18 @@ const DEFAULT_R = 8;
 const DEFAULT_P = 1;
 const MAX_MEM = 64 * 1024 * 1024;
 
+/**
+ * Dummy target for the unknown-email timing guard: legacy `scrypt:<salt>:<hash>`
+ * encoding with a zero salt and all-zero digest, sized from this module's
+ * constants. No parameter components are embedded, so the parser applies the
+ * current default costs — no drift and no regeneration when defaults change.
+ * It is intended to verify false (the login route rejects missing users
+ * regardless of this result); no guarantee that no password could ever match.
+ */
+export const DUMMY_SCRYPT_HASH = `${HASH_PREFIX}:${'0'.repeat(
+  SALT_BYTES * 2
+)}:${'0'.repeat(KEY_LENGTH * 2)}`;
+
 interface ParsedScryptHash {
   n: number;
   r: number;

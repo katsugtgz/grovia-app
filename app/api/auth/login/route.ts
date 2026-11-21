@@ -8,23 +8,17 @@ import {
   reserveLoginAttempt,
   rollbackLoginAttemptReservation,
 } from '@/lib/login-rate-limit';
-import { verifyPasswordAsync } from '@/lib/password';
+import { verifyPasswordAsync, DUMMY_SCRYPT_HASH } from '@/lib/password';
 import type { AuthUser } from '@/lib/types';
 import { LoginRequestSchema } from '@/lib/validations';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * Precomputed scrypt hash (encoded with the exact params from
- * `lib/password.ts`: N=16384, r=8, p=1, 16-byte salt, 64-byte key) of a fixed
- * dummy password. Used to equalize verification timing for unknown emails
- * without touching the real user store. Replace it only by regenerating with
- * `scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64MiB })`
- * and re-encoding as `scrypt:N:r:p:salt:hash`; a mismatch simply verifies
- * false, which is the intended behavior for this timing guard.
- */
-const DUMMY_PASSWORD_HASH =
-  'scrypt:16384:8:1:b83e639862ee1a2bc34c399732de0b19:2ad51614224a769053a76e6efc76b3ea8123b65e0729fbf314689accf74bbfe666a51fbfc1d117a2fb5d9791000ec099292df7917f9cf9fa45d610e69c38e895';
+// Equal-cost dummy target for unknown emails: `DUMMY_SCRYPT_HASH` is derived
+// from the current `lib/password.ts` constants (legacy `scrypt:<salt>:<hash>`
+// encoding, so the parser applies the live default cost parameters) and is
+// deliberately always rejected. No regeneration is ever required; a mismatch
+// against any candidate password is the intended timing-guard behavior.
 
 export async function POST(request: Request): Promise<Response> {
   const { data: rawBody, error: parseError } = await parseJsonBody(request, 16 * 1024);
@@ -71,7 +65,7 @@ export async function POST(request: Request): Promise<Response> {
   let reservationReleased = false;
   try {
     const user = findUserByEmail(parsed.data.email);
-    const targetHash = user ? user.password_hash : DUMMY_PASSWORD_HASH;
+    const targetHash = user ? user.password_hash : DUMMY_SCRYPT_HASH;
     const isPasswordValid = await verifyPasswordAsync(parsed.data.password, targetHash);
 
     if (!user || !isPasswordValid) {

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { resolveAdminEmail, resolveAdminPassword } from './admin-env';
 
 export interface StoredCookie {
   name: string;
@@ -319,7 +320,11 @@ export class LiveHttpClient {
   readonly baseUrl: string;
   readonly jar: CookieJar;
 
-  constructor(baseUrl: string, jar?: CookieJar) {
+  constructor(
+    baseUrl: string,
+    jar?: CookieJar,
+    private readonly adminEnv: NodeJS.ProcessEnv = process.env
+  ) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.jar = jar ?? new CookieJar();
   }
@@ -429,9 +434,12 @@ export class LiveHttpClient {
   }
 
   async login<T = unknown>(
-    email = 'admin@grovia.io',
-    password = 'grovia-demo-2026'
+    email = resolveAdminEmail(this.adminEnv),
+    password = resolveAdminPassword(this.adminEnv)
   ): Promise<LiveHttpResponse<T>> {
+    if (password === undefined) {
+      throw new Error('Set ADMIN_PASSWORD or pass a password when demo admin access is disabled.');
+    }
     return this.post<T>('/api/auth/login', { email, password });
   }
 
@@ -527,7 +535,7 @@ export function cleanupTempDb(dbPath: string): void {
   }
 }
 
-export function resetLiveDatabase(dbPath: string): void {
+export function resetLiveDatabase(dbPath: string, adminEmail = resolveAdminEmail()): void {
   if (!dbPath) {
     return;
   }
@@ -552,7 +560,7 @@ export function resetLiveDatabase(dbPath: string): void {
       db.run("DELETE FROM people WHERE LOWER(status) = 'invited';");
     }
     if (tableSet.has('users')) {
-      db.run("DELETE FROM users WHERE LOWER(email) != 'admin@grovia.io';");
+      db.run('DELETE FROM users WHERE LOWER(email) != ?;', [adminEmail]);
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -973,6 +981,8 @@ export async function startLiveServer(
   const externalBaseUrl = process.env.E2E_BASE_URL?.trim();
   if (externalBaseUrl) {
     const normalizedBaseUrl = externalBaseUrl.replace(/\/+$/, '');
+    // External servers own their environment; options configure the client only.
+    const adminEnv = { ...process.env, ...options.env };
     const controller = new AbortController();
     await waitForHealth(normalizedBaseUrl, readyTimeoutMs, controller.signal);
 
@@ -982,7 +992,7 @@ export async function startLiveServer(
       dbPath: '',
       external: true,
       mode: 'external',
-      createClient: () => new LiveHttpClient(normalizedBaseUrl),
+      createClient: () => new LiveHttpClient(normalizedBaseUrl, undefined, adminEnv),
       resetDb: () => {},
       getLogs: () => '',
       stop: async () => {},
@@ -1077,8 +1087,8 @@ export async function startLiveServer(
           dbPath,
           external: false,
           mode: subcmd,
-          createClient: () => new LiveHttpClient(baseUrl),
-          resetDb: () => resetLiveDatabase(dbPath),
+          createClient: () => new LiveHttpClient(baseUrl, undefined, childEnv),
+          resetDb: () => resetLiveDatabase(dbPath, resolveAdminEmail(childEnv)),
           getLogs: () => logBuffer.toString(),
           stop: async () => {
             if (!stopPromise) {

@@ -5,6 +5,7 @@ import os from 'node:os';
 import { resetLoginAttemptTracker } from '@/lib/login-rate-limit';
 import { clearRevokedSessionTokens } from '@/lib/auth-edge';
 import { closeDb, initSchema } from '@/lib/db';
+import { resolveAdminEmail, resolveAdminPassword } from './admin-env';
 
 const DEFAULT_TEST_DB_PATH = path.join(os.tmpdir(), `grovia-test-suite-${process.pid}.db`);
 let defaultTestDbCleanupRegistered = false;
@@ -99,8 +100,11 @@ export class TestClient {
   }
 
   async loginAsAdmin(): Promise<TestResponse> {
-    const email = process.env.DEMO_ADMIN_EMAIL || 'admin@grovia.io';
-    const password = process.env.DEMO_ADMIN_PASSWORD || 'grovia-demo-2026';
+    const email = resolveAdminEmail();
+    const password = resolveAdminPassword();
+    if (!password) {
+      throw new Error('Set ADMIN_PASSWORD to use loginAsAdmin when demo admin access is disabled.');
+    }
     const res = await this.login(email, password);
     if (res.status !== 200) {
       throw new Error(`loginAsAdmin failed (${res.status}): ${JSON.stringify(res.data)}`);
@@ -465,7 +469,7 @@ export function resetDatabase(dbPath?: string): void {
       db.run('DELETE FROM inquiries;');
     }
     if (tableSet.has('users')) {
-      db.run("DELETE FROM users WHERE LOWER(email) != 'admin@grovia.io';");
+      db.run('DELETE FROM users WHERE LOWER(email) != ?;', [resolveAdminEmail()]);
     }
     if (tableSet.has('people')) {
       db.run("DELETE FROM people WHERE id NOT IN ('0','1','2','3','4','5','6','7','8','9');");

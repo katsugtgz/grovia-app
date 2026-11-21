@@ -68,7 +68,7 @@
 | `/login` | Public | Email/password sign-in (`POST /api/auth/login`) with open-redirect-safe `next` target sanitization (`307` -> `/workspace` when already authenticated) |
 | `/workspace` | Authenticated | Protected Bento people-ops workspace (`Overview`, `People`, `Payroll`, `NotificationTray`, profile/sign-out menu); redirects unauthenticated requests (`307`) to `/login?next=%2Fworkspace`. Roster PII is **admin-only**: non-admin sessions get the workspace shell with an empty roster, and roster-dependent actions (`InviteModal`, invite entry points) are hidden |
 
-- **Seeded Demo Workspace Account** (rendered on `/login` only when the server actually seeds these defaults — i.e. demo admin is allowed in this environment and no `ADMIN_EMAIL`/`ADMIN_PASSWORD` overrides are configured):
+- **Seeded Demo Workspace Account**: `/login` shows these credentials only when demo admin is allowed, neither `ADMIN_EMAIL` nor `ADMIN_PASSWORD` overrides the defaults, and the persisted demo account matches these credentials. Removing an override does not reset an existing password; if the saved password differs, the hint stays hidden.
   - **Email**: `admin@grovia.io`
   - **Password**: `grovia-demo-2026`
 - **Session Signing (`AUTH_SECRET`)**:
@@ -142,7 +142,7 @@ export AUTH_SECRET="replace-with-32-byte-secret"
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for the public landing page, sign in at [http://localhost:3000/login](http://localhost:3000/login) with `admin@grovia.io` / `grovia-demo-2026`, and access the authenticated workspace at [http://localhost:3000/workspace](http://localhost:3000/workspace) backed by `grovia.db` (`bun:sqlite`).
+Open [http://localhost:3000](http://localhost:3000) for the public landing page. Sign in at [http://localhost:3000/login](http://localhost:3000/login) with your configured admin credentials, or use the default demo credentials above if the login page displays them. The authenticated workspace at [http://localhost:3000/workspace](http://localhost:3000/workspace) uses `grovia.db` (`bun:sqlite`).
 
 ### Scripts & Quality Gates
 
@@ -161,7 +161,8 @@ Open [http://localhost:3000](http://localhost:3000) for the public landing page,
 
 ## CI/CD & Repository Governance
 
-- **Continuous Integration ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml))**: Runs on every push and PR to `main`: `bun install --frozen-lockfile` → `bun run lint` → `bun run typecheck` → `bun test` → `bun run build` → `npx react-doctor@latest --score` (`100`).
+- **Continuous Integration ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml))**: Runs on pushes and PRs targeting `main` or `master`: `bun install --frozen-lockfile` → `bun run lint` → `bun run typecheck` → `bun test` → `bun run build`.
+- **React Doctor ([`.github/workflows/react-doctor.yml`](./.github/workflows/react-doctor.yml))**: A separate workflow runs on PRs when opened, updated, reopened, or marked ready for review, and on pushes to `main`. It uses the commit-pinned [React Doctor v2 action](https://github.com/millionco/react-doctor/tree/695e46eee203a5d1855020191aa7e9c010a1250e) to scan the full project and fails on warnings.
 - **Continuous Deployment ([`.github/workflows/cd.yml`](./.github/workflows/cd.yml))**: Automatically builds and deploys `main` to [Netlify Production](https://grovia-motion-fullstack.netlify.app) via `bunx netlify-cli deploy --prod`.
 - **Branch Protection**: `main` requires passing `test` status check, up-to-date branches, conversation resolution, pull request review, and disallows force-pushes or branch deletion.
 - **Security & Community**: Equipped with [`LICENSE`](./LICENSE) (MIT), [`CONTRIBUTING.md`](./CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md), [`SECURITY.md`](./SECURITY.md), [`CHANGELOG.md`](./CHANGELOG.md), Dependabot updates, and PR/Issue templates.

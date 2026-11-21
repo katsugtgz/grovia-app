@@ -32,7 +32,10 @@ export function PeopleView({ active, people, onOpenInvite }: PeopleViewProps) {
 
   const [query, setQuery] = useState('');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set([people[0]?.id || '0']));
+  const [selectedIds, setSelectedIds] = useState(() => {
+    const firstPerson = people[0];
+    return new Set(firstPerson ? [firstPerson.id] : []);
+  });
 
   // Compute team counts
   const teamCounts = useMemo(() => {
@@ -283,13 +286,15 @@ export function PeopleView({ active, people, onOpenInvite }: PeopleViewProps) {
         onToggleRowSelect={toggleRowSelect}
       />
 
-      <PeopleActionTray
-        selectedCount={selectedIds.size}
-        onExport={handleExportSelected}
-        onMessage={handleMessageSelected}
-        onArchive={handleArchiveSelected}
-        onClear={handleClearSelection}
-      />
+      {people.length > 0 && (
+        <PeopleActionTray
+          selectedCount={selectedIds.size}
+          onExport={handleExportSelected}
+          onMessage={handleMessageSelected}
+          onArchive={handleArchiveSelected}
+          onClear={handleClearSelection}
+        />
+      )}
     </div>
   );
 }

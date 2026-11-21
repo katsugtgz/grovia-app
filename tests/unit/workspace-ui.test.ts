@@ -126,6 +126,7 @@ describe('Unit — M3 Workspace Migration, Public Landing Mount, PII Decoupling 
       expect(html).toContain('id="view-overview"');
       expect(html).toContain('id="view-people"');
       expect(html).toContain('id="view-payroll"');
+      expect(html).toContain('id="add-member"');
       expect(html).toContain('id="invite-dialog"');
       expect(html).toContain('id="demo-dialog"');
       expect(html).toContain('id="book-demo-btn"');
@@ -135,6 +136,47 @@ describe('Unit — M3 Workspace Migration, Public Landing Mount, PII Decoupling 
       expect(html).toContain('Alex Rivera');
       expect(html).toContain('admin@grovia.io');
       expect(html).toContain('Sign out');
+    });
+
+    test('WorkspaceShell omits invite controls when canManageRoster is false', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(WorkspaceShell, {
+          initialPeople: SAMPLE_PEOPLE,
+          user: DEMO_USER,
+          canManageRoster: false,
+        })
+      );
+
+      expect(html).toContain('id="view-people"');
+      expect(html).not.toContain('id="add-member"');
+      expect(html).not.toContain('id="invite-dialog"');
+    });
+
+    test('WorkspaceShell renders no bulk actions or selection summary for an empty roster', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(WorkspaceShell, {
+          initialPeople: [],
+          user: DEMO_USER,
+          canManageRoster: false,
+        })
+      );
+
+      expect(html).toContain('Nobody matches that yet.');
+      expect(html).not.toContain('aria-label="Bulk actions"');
+      expect(html).not.toMatch(/\b\d+ selected\b/);
+    });
+
+    test('WorkspaceShell initially selects the first teammate in a populated roster', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(WorkspaceShell, {
+          initialPeople: SAMPLE_PEOPLE.slice(1),
+          user: DEMO_USER,
+        })
+      );
+
+      expect(html).toMatch(/<button\b[^>]*\bdata-i="1"[^>]*\baria-pressed="true"/);
+      expect(html).toContain('aria-label="Bulk actions"');
+      expect(html).toContain('>1 selected</span>');
     });
   });
 

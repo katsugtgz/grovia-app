@@ -4,15 +4,7 @@ import {
   startLiveServer,
   type LiveServerHandle,
 } from '../../harness/live-http';
-
-const SENSITIVE_PII_MARKERS = [
-  ...Array.from({ length: 10 }, (_, idx) => `Demo Person ${String(idx + 1).padStart(2, '0')}`),
-  ...Array.from(
-    { length: 10 },
-    (_, idx) => `person${String(idx + 1).padStart(2, '0')}@example.invalid`
-  ),
-  '$4,850',
-];
+import { assertNoSeedPeoplePii } from '../../harness/pii';
 
 let server: LiveServerHandle | undefined;
 
@@ -55,9 +47,7 @@ describe('Tier 1 — F3: /workspace Route & Edge Middleware Guard', () => {
     const res = await client.get<string>('/workspace');
 
     expect(res.status).toBe(307);
-    for (const marker of SENSITIVE_PII_MARKERS) {
-      expect(res.text).not.toContain(marker);
-    }
+    assertNoSeedPeoplePii(res.text);
   });
 
   test(

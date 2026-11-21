@@ -165,13 +165,7 @@ export function ProgressCard() {
             );
           })}
         </ul>
-        <div
-          className="week__tip"
-          id="week-tip"
-          role="status"
-          aria-live="polite"
-          ref={tipRef}
-        >
+        <div className="week__tip" id="week-tip" role="status" ref={tipRef}>
           5h 42m
         </div>
       </div>

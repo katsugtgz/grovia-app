@@ -1,11 +1,16 @@
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterAll } from 'bun:test';
 import { testClient, resetDatabase } from '../harness/test-client';
 import { fixtures, createRandomEmail } from '../harness/fixtures';
 import { assertions } from '../harness/assertions';
 
 describe('Tier 3 — Cross-Feature: Inquiries Lifecycle & System Health (F7 + F11)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetDatabase();
+    await testClient.loginAsAdmin();
+  });
+
+  afterAll(() => {
+    testClient.clearAuth();
   });
 
   test('T3.2.1: Inquiry creation establishes initial "new" status and unique ticketId', async () => {
@@ -76,7 +81,7 @@ describe('Tier 3 — Cross-Feature: Inquiries Lifecycle & System Health (F7 + F1
   });
 
   test('T3.2.5: System health remains "ok" and database "healthy" throughout ticket lifecycle', async () => {
-    const healthRes = await testClient.get('/api/health');
+    const healthRes = await testClient.get('/api/health', { skipAuth: true });
     assertions.assertOk(healthRes);
     expect(healthRes.data.status).toBe('ok');
     expect(healthRes.data.database).toBe('healthy');

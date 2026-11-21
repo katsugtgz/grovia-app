@@ -2,9 +2,10 @@
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import gsap from 'gsap';
-import type { ViewType } from '@/lib/types';
+import type { AuthUser, ViewType } from '@/lib/types';
 import { Icon } from '@/components/ui/Icon';
 import { $, isReducedMotion } from '@/lib/motion';
+import { HeaderProfileMenu } from './HeaderProfileMenu';
 
 export interface HeaderProps {
   activeView: ViewType;
@@ -12,6 +13,9 @@ export interface HeaderProps {
   onOpenSettings?: () => void;
   onOpenNotifications?: () => void;
   unreadNotificationsCount?: number;
+  user: AuthUser;
+  onLogout?: () => void | Promise<void>;
+  defaultProfileOpen?: boolean;
 }
 
 const TABS: { id: ViewType; label: string }[] = [
@@ -26,6 +30,9 @@ export function Header({
   onOpenSettings,
   onOpenNotifications,
   unreadNotificationsCount = 3,
+  user,
+  onLogout,
+  defaultProfileOpen = false,
 }: HeaderProps) {
   const tabsNavRef = useRef<HTMLElement>(null);
   const pillRef = useRef<HTMLSpanElement>(null);
@@ -33,6 +40,7 @@ export function Header({
   const midRef = useRef<HTMLElement>(null);
   const capRRef = useRef<HTMLElement>(null);
   const bellBtnRef = useRef<HTMLButtonElement>(null);
+  const hasMountedRef = useRef(false);
 
   // Synchronize sliding indicator pill position with direction-aware GSAP easing
   const updatePillPosition = useCallback(
@@ -116,6 +124,10 @@ export function Header({
   }, [updatePillPosition]);
 
   useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
     updatePillPosition(true);
   }, [activeView, updatePillPosition]);
 
@@ -205,6 +217,7 @@ export function Header({
           className="chip-btn magnetic"
           type="button"
           id="settings"
+          aria-label="Settings"
           onClick={onOpenSettings}
         >
           <Icon name="gear" className="ico ico--gear" aria-hidden="true" />
@@ -231,13 +244,11 @@ export function Header({
           )}
         </button>
 
-        <button
-          className="round-btn magnetic"
-          type="button"
-          aria-label="Your profile"
-        >
-          <Icon name="user" className="ico" aria-hidden="true" />
-        </button>
+        <HeaderProfileMenu
+          user={user}
+          onLogout={onLogout}
+          defaultProfileOpen={defaultProfileOpen}
+        />
       </div>
     </header>
   );

@@ -23,6 +23,33 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Sync Netlify Production Environment
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ALLOW_DEMO_ADMIN: ${{ vars.ALLOW_DEMO_ADMIN }}
+          NETLIFY_DB_PATH: ${{ vars.NETLIFY_DB_PATH }}
+        run: |
+          if [ -n "$NETLIFY_AUTH_TOKEN" ] && [ -n "$NETLIFY_SITE_ID" ]; then
+            if [ -z "$AUTH_SECRET" ]; then
+              echo "::error::AUTH_SECRET secret is required for production deployments."
+              exit 1
+            fi
+            bunx netlify-cli env:set AUTH_SECRET "$AUTH_SECRET" --site "$NETLIFY_SITE_ID" --context production --force --secret
+            if [ -n "$ADMIN_PASSWORD" ]; then
+              bunx netlify-cli env:set ADMIN_PASSWORD "$ADMIN_PASSWORD" --site "$NETLIFY_SITE_ID" --context production --force --secret
+            fi
+            ALLOW_DEMO_ADMIN_VAL="${ALLOW_DEMO_ADMIN:-0}"
+            bunx netlify-cli env:set ALLOW_DEMO_ADMIN "$ALLOW_DEMO_ADMIN_VAL" --site "$NETLIFY_SITE_ID" --context production --force
+            if [ -n "$NETLIFY_DB_PATH" ]; then
+              bunx netlify-cli env:set DB_PATH "$NETLIFY_DB_PATH" --site "$NETLIFY_SITE_ID" --context production --force
+            fi
+          else
+            echo "Netlify secrets not configured; skipping environment sync."
+          fi
+
       - name: Deploy to Netlify Production
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}

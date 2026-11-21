@@ -1,19 +1,28 @@
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterAll } from 'bun:test';
 import { testClient, resetDatabase } from '../harness/test-client';
-import { fixtures, createRandomEmail } from '../harness/fixtures';
-import { assertions } from '../harness/assertions';
+import { createRandomEmail } from '../harness/fixtures';
 
 describe('Tier 3 — Cross-Feature: Concurrent Access & Multi-Tenant State (F6 + F10 + F11)', () => {
   beforeEach(() => {
     resetDatabase();
+    testClient.clearAuth();
+  });
+
+  afterAll(() => {
+    testClient.clearAuth();
   });
 
   test('T3.4.1: Concurrent batch execution of 10 waitlist and 10 inquiry requests completes', async () => {
+    await testClient.loginAsAdmin();
     const waitlistPromises = Array.from({ length: 10 }, (_, i) =>
-      testClient.post('/api/waitlist', {
-        name: `Concurrent Waitlist User ${i}`,
-        email: createRandomEmail(`conc_w_${i}`),
-      })
+      testClient.post(
+        '/api/waitlist',
+        {
+          name: `Concurrent Waitlist User ${i}`,
+          email: createRandomEmail(`conc_w_${i}`),
+        },
+        { skipAuth: true }
+      )
     );
 
     const inquiriesPromises = Array.from({ length: 10 }, (_, i) =>
@@ -32,6 +41,8 @@ describe('Tier 3 — Cross-Feature: Concurrent Access & Multi-Tenant State (F6 +
 
     expect(waitlistResults.length).toBe(10);
     expect(inquiriesResults.length).toBe(10);
+    for (const r of waitlistResults) expect([200, 201]).toContain(r.status);
+    for (const r of inquiriesResults) expect([200, 201]).toContain(r.status);
   });
 
   test('T3.4.2: All concurrent requests return 200/201 with zero dropped requests', async () => {
@@ -50,14 +61,19 @@ describe('Tier 3 — Cross-Feature: Concurrent Access & Multi-Tenant State (F6 +
   });
 
   test('T3.4.3: Waitlist count in DB accurately reflects total concurrent entries added', async () => {
+    await testClient.loginAsAdmin();
     const initialCount = (await testClient.get('/api/waitlist')).data.count;
     const batchSize = 8;
 
     const promises = Array.from({ length: batchSize }, (_, i) =>
-      testClient.post('/api/waitlist', {
-        name: `Count Check ${i}`,
-        email: createRandomEmail(`count_chk_${i}`),
-      })
+      testClient.post(
+        '/api/waitlist',
+        {
+          name: `Count Check ${i}`,
+          email: createRandomEmail(`count_chk_${i}`),
+        },
+        { skipAuth: true }
+      )
     );
 
     await Promise.all(promises);
@@ -80,6 +96,7 @@ describe('Tier 3 — Cross-Feature: Concurrent Access & Multi-Tenant State (F6 +
   });
 
   test('T3.4.5: All concurrent inquiries receive unique, properly formatted ticket IDs', async () => {
+    await testClient.loginAsAdmin();
     const promises = Array.from({ length: 8 }, (_, i) =>
       testClient.post('/api/inquiries', {
         name: `Ticket User ${i}`,

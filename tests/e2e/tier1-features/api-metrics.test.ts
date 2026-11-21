@@ -1,8 +1,15 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { testClient } from '../harness/test-client';
 import { assertions } from '../harness/assertions';
 
 describe('Tier 1 — F8: SaaS Metrics Endpoint', () => {
+  beforeAll(async () => {
+    await testClient.loginAsAdmin();
+  });
+
+  afterAll(() => {
+    testClient.clearAuth();
+  });
   test('T1.2.1: GET /api/metrics returns HTTP 200 with JSON content-type', async () => {
     const res = await testClient.get('/api/metrics');
     assertions.assertStatus(res, 200);

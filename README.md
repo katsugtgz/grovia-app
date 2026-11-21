@@ -5,7 +5,7 @@
     <td width="50%" align="center">
       <img src="./public/showcase/01-overview-bento.gif" alt="Overview Bento Grid, Stopwatch Dial, 3D Tilt & Onboarding Particles (30fps)" width="100%" />
       <br />
-      <sub><b>1. Overview Bento & Physics</b> — Cascading entrance, 3D tilt, SVG stopwatch, 14-particle burst</sub>
+      <sub><b>1. Overview Bento & Physics</b> — Zero-delay LCP shell, 3D tilt, SVG stopwatch, 14-particle burst</sub>
     </td>
     <td width="50%" align="center">
       <img src="./public/showcase/02-people-flip.gif" alt="People Directory GSAP Flip Morphing, Search & Action Tray (30fps)" width="100%" />
@@ -52,11 +52,28 @@
 
 ## Highlights
 
-- **Exact Grovia Aesthetic & Motion Choreography**: Warm sage-green Bento surfaces (`38px` / `28px` radii, inset white hairline elevation), Outfit & Inter typography, 31-glyph SVG sprite (`Icon.tsx`), sliding navigation pill with direction-aware `capL` / `mid` / `capR` GSAP delays, and a `1.6s` cascading entrance timeline.
+- **Exact Grovia Aesthetic & Motion Choreography**: Warm sage-green Bento surfaces (`38px` / `28px` radii, inset white hairline elevation), Outfit & Inter typography, 31-glyph SVG sprite (`Icon.tsx`), sliding navigation pill with direction-aware `capL` / `mid` / `capR` GSAP delays, and an immediate zero-opacity-delay shell render (LCP optimization) while preserving interactive GSAP view transitions.
 - **Compositor-Only Physics & `prefers-reduced-motion` Safety**: All animations strictly animate GPU-composited `transform` and `opacity` properties via GSAP 3.15 (`Flip`, `quickTo`, `power3.out`, `back.out`, `elastic.out`) and automatically snap when `prefers-reduced-motion: reduce` is enabled.
-- **Fullstack Next.js 15 Route Handlers + Bun SQLite (`WAL`)**: Real API persistence for waitlist signups, support inquiries/tickets, hiring pipeline metrics, and dynamic 12-month ROI modeling (`bun:sqlite` locally, with seamless in-memory serverless fallback on Netlify Node runtimes).
+- **Fullstack Next.js 15 Route Handlers + Bun SQLite (`WAL`)**: Persists waitlist signups and support inquiries locally on a writable volume, and serves hiring pipeline metrics and ROI modeling. The Node fallback is not durable on Netlify Functions.
 - **Google Chrome Modern Web Guidance Aligned**: LCP portrait prioritization (`priority`), non-blocking interactions (INP-friendly transitions), CLS containment, native `<dialog>` modals with ESC/backdrop closing, and semantic ARIA landmarks/tablists.
-- **Zero-Defect Verification**: `235/235` passing tests (unit, contract, integration, and real-world scenarios), strict ESLint + TypeScript checks, automated GitHub Actions CI & Netlify CD, and **`100 / 100 Great`** on `npx react-doctor@latest`.
+- **Zero-Defect Verification**: `384/384` passing tests across 48 suites (unit, contract, integration, stress, and live HTTP E2E tiers 1–4), strict ESLint + TypeScript checks, automated GitHub Actions CI & Netlify CD, and **`100 / 100 Great`** on `npx react-doctor@latest`.
+
+---
+
+## Routes, Authentication & Access Control
+
+| Route | Access | Description |
+| --- | --- | --- |
+| `/` | Public | Marketing landing page with product pitch, Bento feature highlights, pricing tiers, interactive waitlist signup (`POST /api/waitlist`), and zero employee PII in public JS bundles |
+| `/login` | Public | Email/password sign-in (`POST /api/auth/login`) with open-redirect-safe `next` target sanitization (`307` -> `/workspace` when already authenticated) |
+| `/workspace` | Authenticated | Protected Bento people-ops workspace (`Overview`, `People`, `Payroll`, `NotificationTray`, profile/sign-out menu); redirects unauthenticated requests (`307`) to `/login?next=%2Fworkspace`. Roster PII is **admin-only**: non-admin sessions get the workspace shell with an empty roster, and roster-dependent actions (`InviteModal`, invite entry points) are hidden |
+
+- **Seeded Demo Workspace Account**: `/login` shows these credentials only when demo admin is allowed, neither `ADMIN_EMAIL` nor `ADMIN_PASSWORD` overrides the defaults, and the persisted demo account matches these credentials. Removing an override does not reset an existing password; if the saved password differs, the hint stays hidden.
+  - **Email**: `admin@grovia.io`
+  - **Password**: `grovia-demo-2026`
+- **Session Signing (`AUTH_SECRET`)**:
+  - Edge-compatible Web Crypto HMAC-SHA256 stateless `grovia_session` cookie (`HttpOnly; SameSite=Lax; Path=/; Max-Age=86400`) with server-side revocation on logout.
+  - `AUTH_SECRET` (or `SESSION_SECRET`) is **required in production** (fails closed if unset); falls back to a deterministic development secret only in non-production (`development`/`test`) environments. Demo admin seeding in production is disabled unless `ALLOW_DEMO_ADMIN=1` is explicitly configured.
 
 ---
 
@@ -64,23 +81,30 @@
 
 | Surface / Module | Capabilities | Implementation |
 | --- | --- | --- |
+| **Public Landing (`/`)** | Semantic `<header>` + `<main>` landmarks, Bento feature showcase, pricing tiers, waitlist signup form (`POST /api/waitlist`), PII-free client bundle | [`components/landing/LandingPage.tsx`](./components/landing/LandingPage.tsx) |
+| **Auth & Edge Guard** | Web Crypto `grovia_session` signing/verification, bounded `decodeURIComponent` open-redirect sanitizer, Edge `middleware.ts`, `/login` UI | [`middleware.ts`](./middleware.ts), [`lib/auth-edge.ts`](./lib/auth-edge.ts), [`components/auth/LoginForm.tsx`](./components/auth/LoginForm.tsx) |
 | **Overview Bento** | Animated split-text greeting, hiring pipeline rail (`17% / 15% / 56% / 12%`), live metrics counters, 3D parallax profile card, 7-day progress chart, SVG circular stopwatch (`6°/s`, 60 ticks, digit rollers), 14-particle onboarding checklist, accordion & week calendar, Growth & ROI calculator | [`components/views/OverviewView.tsx`](./components/views/OverviewView.tsx) |
 | **People Directory** | Instant search across name/role/team, GSAP `Flip` animated team filter pills (`All`, `Design`, `Engineering`, `Product`, `Operations`), selectable table rows, procedural SVG avatars (`no()`), floating bulk action tray with CSV export | [`components/views/PeopleView.tsx`](./components/views/PeopleView.tsx) |
 | **Payroll & PDF Export** | Keyboard-navigable teammate roster, 30-day PRNG timesheet matrix with staggered chip reveals, base + 1.5x overtime & deduction computation, pure client-side binary PDF 1.4 contract & payslip generator | [`components/views/PayrollView.tsx`](./components/views/PayrollView.tsx) |
-| **Modals & Tray** | Notification drawer with bell-shake trigger, Workspace Settings dialog (`localStorage` persisted), Invite Teammate dialog with field-shake validation, Demo Booking modal | [`components/modals/`](./components/modals/) |
-| **Persistence Engine** | WAL-mode `bun:sqlite` schema (`waitlist`, `inquiries`) with unique indexes, transactional inserts, health probes, and serverless fallback | [`lib/db.ts`](./lib/db.ts) |
+| **Modals & Tray** | Notification drawer with bell-shake trigger, Workspace Settings dialog (`localStorage` persisted), Invite Teammate dialog (`POST /api/people`) with field-shake validation, Demo Booking modal | [`components/modals/`](./components/modals/) |
+| **Persistence Engine** | WAL-mode `bun:sqlite` schema (`users`, `people`, `waitlist`, `inquiries`) with unique indexes, transactional inserts, and health probes; non-durable Node fallback on Netlify Functions | [`lib/db.ts`](./lib/db.ts) |
 
 ---
 
 ## REST API Endpoints
 
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `GET` | [`/api/health`](https://grovia-motion-fullstack.netlify.app/api/health) | System status, Bun runtime version, uptime, and SQLite health check |
-| `GET` | [`/api/metrics`](https://grovia-motion-fullstack.netlify.app/api/metrics) | Live team/waitlist count, hiring pipeline distribution, and benchmark quartile |
-| `POST` | `/api/roi` | Zod-validated 12-month revenue projection & ROI multiple computation |
-| `GET`, `POST` | [`/api/waitlist`](https://grovia-motion-fullstack.netlify.app/api/waitlist) | List waitlist entries or book spot with case-insensitive deduplication (`409`) |
-| `GET`, `POST`, `PATCH` | [`/api/inquiries`](https://grovia-motion-fullstack.netlify.app/api/inquiries) | Create & manage support tickets (`GROV-XXXX`) with status transitions |
+| Method | Endpoint | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | [`/api/health`](https://grovia-motion-fullstack.netlify.app/api/health) | Public | System status, Bun runtime version, uptime, and SQLite health check |
+| `POST` | `/api/roi` | Public | Zod-validated 12-month revenue projection & ROI multiple computation |
+| `POST` | `/api/waitlist` | Public | Book waitlist spot with case-insensitive deduplication (`409`) |
+| `GET` | `/api/waitlist` | Authenticated (Admin) | List waitlist entries and total queue count (`401` when unauthenticated, `403` for non-admin or blocked prod demo session) |
+| `POST` | `/api/auth/login` | Public | Authenticate user and set `HttpOnly` `grovia_session` cookie |
+| `POST` | `/api/auth/logout` | Public | Clear `grovia_session` cookie (`Max-Age=0`) |
+| `GET` | `/api/auth/session` | Authenticated | Inspect active session user (`200` authenticated, `401` unauthenticated) |
+| `GET`, `POST` | `/api/people` | Authenticated (Admin) | List employee roster or invite teammate (`403` for non-admin sessions; `201` created, `409` duplicate email for admins). Roster PII (emails, phones, birthdays, pay rates) never leaves the server for non-admin sessions |
+| `GET` | `/api/metrics` | Authenticated | Live team/waitlist count, hiring pipeline distribution, and benchmark quartile |
+| `GET`, `POST`, `PATCH` | `/api/inquiries` (& `/[id]`) | Authenticated | Create & manage support tickets (`GROV-XXXX`) with status transitions |
 
 <details>
 <summary>Quick API verification with <code>curl</code></summary>
@@ -111,11 +135,16 @@ cd grovia-app
 # 2. Install dependencies strictly via Bun
 bun install --frozen-lockfile
 
-# 3. Run development server
+# 3. (Optional) Configure custom session secret (falls back to dev secret locally)
+export AUTH_SECRET="replace-with-32-byte-secret"
+
+# 4. Run development server
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to explore the interactive workspace locally backed by `grovia.db` (`bun:sqlite`).
+Open [http://localhost:3000](http://localhost:3000) for the public landing page. Sign in at [http://localhost:3000/login](http://localhost:3000/login) with your configured admin credentials, or use the default demo credentials above if the login page displays them. The authenticated workspace at [http://localhost:3000/workspace](http://localhost:3000/workspace) uses `grovia.db` (`bun:sqlite`).
+
+**Production admin sign-in:** Set a valid private `ADMIN_PASSWORD`, or set `ALLOW_DEMO_ADMIN=1` only for an intentional demo. Private admin access is scoped to the configured `ADMIN_EMAIL`. Existing admin sessions may require signing in again after this update or a credential change.
 
 ### Scripts & Quality Gates
 
@@ -125,18 +154,22 @@ Open [http://localhost:3000](http://localhost:3000) to explore the interactive w
 | `bun run build` | Production Next.js build |
 | `bun run lint` | Run ESLint (`next lint`) |
 | `bun run typecheck` | Strict TypeScript type checking (`tsc --noEmit`) |
-| `bun test` | Run all 235 tests across 28 suites (unit, E2E tiers 1–4) |
+| `bun run test` | Run core template/helper tests (`tests/core.test.ts`, invoked by `bun run validate`) |
+| `bun test` / `bun run test:all` | Run all 384 tests across 48 suites (unit, stress, E2E tiers 1–4, live HTTP v2) |
 | `bun run doctor` | Execute `npx react-doctor@latest` (enforces `100 / 100` score) |
-| `bun run validate` | Full validation pipeline (`lint && typecheck && test && build && doctor`) |
+| `bun run validate` | Fast validation pipeline (`lint && typecheck && test && build && doctor`); run `bun test` for the full 48-suite run |
 
 ---
 
 ## CI/CD & Repository Governance
 
-- **Continuous Integration ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml))**: Runs on every push and PR to `main`: `bun install --frozen-lockfile` → `bun run lint` → `bun run typecheck` → `bun test` → `bun run build` → `npx react-doctor@latest --score` (`100`).
+- **Continuous Integration ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml))**: Runs on pushes and PRs targeting `main` or `master`: `bun install --frozen-lockfile` → `bun run lint` → `bun run typecheck` → `bun test` → `bun run build`.
+- **React Doctor ([`.github/workflows/react-doctor.yml`](./.github/workflows/react-doctor.yml))**: A separate workflow runs on PRs when opened, updated, reopened, or marked ready for review, and on pushes to `main`. Both events scan the full project using the pinned [React Doctor v2 action](https://github.com/millionco/react-doctor/tree/695e46eee203a5d1855020191aa7e9c010a1250e) and scanner `0.9.23`. Findings at warning severity or higher fail PR runs. Pushes to `main` report findings without failing on them.
 - **Continuous Deployment ([`.github/workflows/cd.yml`](./.github/workflows/cd.yml))**: Automatically builds and deploys `main` to [Netlify Production](https://grovia-motion-fullstack.netlify.app) via `bunx netlify-cli deploy --prod`.
 - **Branch Protection**: `main` requires passing `test` status check, up-to-date branches, conversation resolution, pull request review, and disallows force-pushes or branch deletion.
 - **Security & Community**: Equipped with [`LICENSE`](./LICENSE) (MIT), [`CONTRIBUTING.md`](./CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md), [`SECURITY.md`](./SECURITY.md), [`CHANGELOG.md`](./CHANGELOG.md), Dependabot updates, and PR/Issue templates.
+
+**Netlify storage limitation:** Standard [Netlify Functions](https://docs.netlify.com/build/functions/overview/) run in ephemeral environments. A writable `NETLIFY_DB_PATH` only changes the local snapshot location; it does not make writes durable or shared across instances. Do not rely on this deployment to retain waitlist signups, inquiries, or roster changes. Durable production writes require a provisioned shared database and a transactional adapter with schema migration and cross-instance verification, or moving the app to a host with a persistent volume for SQLite.
 
 ---
 

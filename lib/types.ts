@@ -232,3 +232,51 @@ export interface TemplateSettings {
   name: string;
   day: number;
 }
+
+// ==========================================
+// Auth & People API Contracts (M6)
+// ==========================================
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+}
+
+export interface AuthLoginResponse {
+  success: boolean;
+  user?: AuthUser;
+  error?: string;
+  details?: unknown;
+}
+
+export interface AuthSessionResponse {
+  success: boolean;
+  authenticated: boolean;
+  user?: AuthUser;
+  error?: string;
+}
+
+export interface PeopleListResponse {
+  success: boolean;
+  people?: Person[];
+  count?: number;
+  error?: string;
+}
+
+export interface PersonInviteRequest {
+  name: string;
+  email: string;
+  role: string;
+  team: string;
+  city?: string;
+  rate?: number;
+}
+
+export interface PersonInviteResponse {
+  success: boolean;
+  person?: Person;
+  error?: string;
+  details?: unknown;
+}

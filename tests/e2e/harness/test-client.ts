@@ -1,6 +1,40 @@
 import { Database } from 'bun:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
+import { resetLoginAttemptTracker } from '@/lib/login-rate-limit';
+import { clearRevokedSessionTokens } from '@/lib/auth-edge';
+import { closeDb, initSchema } from '@/lib/db';
+import { resolveAdminEmail, resolveAdminPassword } from './admin-env';
+
+const DEFAULT_TEST_DB_PATH = path.join(os.tmpdir(), `grovia-test-suite-${process.pid}.db`);
+let defaultTestDbCleanupRegistered = false;
+
+export function cleanupDefaultTestDbFiles(): void {
+  const hasAnyFile = ['', '-wal', '-shm'].some((suffix) =>
+    fs.existsSync(`${DEFAULT_TEST_DB_PATH}${suffix}`)
+  );
+  if (!hasAnyFile) return;
+
+  try {
+    closeDb();
+  } catch {}
+  for (const suffix of ['', '-wal', '-shm']) {
+    const file = `${DEFAULT_TEST_DB_PATH}${suffix}`;
+    try {
+      if (fs.existsSync(file)) {
+        fs.unlinkSync(file);
+      }
+    } catch {}
+  }
+}
+
+function registerDefaultTestDbCleanup(): void {
+  if (defaultTestDbCleanupRegistered) return;
+  defaultTestDbCleanupRegistered = true;
+  process.once('beforeExit', cleanupDefaultTestDbFiles);
+  process.once('exit', cleanupDefaultTestDbFiles);
+}
 
 export class RouteNotFoundError extends Error {
   public routePath: string;
@@ -34,13 +68,109 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   params?: Record<string, string>;
   direct?: boolean;
+  skipAuth?: boolean;
+}
+
+export interface TestClientOptions {
+  directOnly?: boolean;
 }
 
 export class TestClient {
   private baseUrl: string | null;
+  private cookies: Map<string, string> = new Map();
 
-  constructor(baseUrl?: string) {
-    this.baseUrl = baseUrl || process.env.E2E_BASE_URL || null;
+  constructor(baseUrl?: string, options?: TestClientOptions) {
+    this.baseUrl = options?.directOnly ? null : baseUrl || process.env.E2E_BASE_URL || null;
+  }
+
+  clearAuth(): void {
+    this.cookies.clear();
+  }
+
+  getCookie(name: string): string | undefined {
+    return this.cookies.get(name);
+  }
+
+  setCookie(name: string, value: string): void {
+    this.cookies.set(name, value);
+  }
+
+  async login(email: string, password: string): Promise<TestResponse> {
+    return this.post('/api/auth/login', { email, password });
+  }
+
+  async loginAsAdmin(): Promise<TestResponse> {
+    const email = resolveAdminEmail();
+    const password = resolveAdminPassword();
+    if (!password) {
+      throw new Error('Set ADMIN_PASSWORD to use loginAsAdmin when demo admin access is disabled.');
+    }
+    const res = await this.login(email, password);
+    if (res.status !== 200) {
+      throw new Error(`loginAsAdmin failed (${res.status}): ${JSON.stringify(res.data)}`);
+    }
+    return res;
+  }
+
+  async logout(): Promise<TestResponse> {
+    const res = await this.post('/api/auth/logout');
+    this.clearAuth();
+    return res;
+  }
+
+  private applyCookies(headers: Headers, skipAuth?: boolean): void {
+    if (skipAuth || headers.has('cookie') || this.cookies.size === 0) {
+      return;
+    }
+    const serialized = Array.from(this.cookies.entries())
+      .map(([k, v]) => `${k}=${v}`)
+      .join('; ');
+    if (serialized) {
+      headers.set('cookie', serialized);
+    }
+  }
+
+  private captureSetCookies(headers: Headers): void {
+    const getSetCookie = (headers as unknown as { getSetCookie?: () => string[] }).getSetCookie;
+    const rawHeaders: string[] =
+      typeof getSetCookie === 'function'
+        ? getSetCookie.call(headers)
+        : headers.get('set-cookie')
+          ? [headers.get('set-cookie') as string]
+          : [];
+
+    for (const header of rawHeaders) {
+      if (!header) continue;
+      const parts = header.split(';').map((p) => p.trim());
+      const nameValue = parts[0];
+      if (!nameValue) continue;
+      const eqIdx = nameValue.indexOf('=');
+      if (eqIdx <= 0) continue;
+      const name = nameValue.slice(0, eqIdx).trim();
+      const value = nameValue.slice(eqIdx + 1).trim();
+
+      let shouldDelete = value.length === 0;
+      for (const attr of parts.slice(1)) {
+        const lower = attr.toLowerCase();
+        if (lower.startsWith('max-age=')) {
+          const maxAge = Number(lower.slice('max-age='.length).trim());
+          if (!Number.isNaN(maxAge) && maxAge <= 0) {
+            shouldDelete = true;
+          }
+        } else if (lower.startsWith('expires=')) {
+          const expiresAt = Date.parse(attr.slice('expires='.length).trim());
+          if (!Number.isNaN(expiresAt) && expiresAt <= Date.now()) {
+            shouldDelete = true;
+          }
+        }
+      }
+
+      if (shouldDelete) {
+        this.cookies.delete(name);
+      } else {
+        this.cookies.set(name, value);
+      }
+    }
   }
 
   async get<T = any>(endpoint: string, options?: RequestOptions): Promise<TestResponse<T>> {
@@ -82,6 +212,7 @@ export class TestClient {
   ): Promise<TestResponse<T>> {
     const url = new URL(endpoint, this.baseUrl!);
     const headers = new Headers(options.headers || {});
+    this.applyCookies(headers, options.skipAuth);
 
     let reqBody: string | undefined = undefined;
     if (body !== undefined) {
@@ -151,6 +282,7 @@ export class TestClient {
     }
 
     const headers = new Headers(options.headers || {});
+    this.applyCookies(headers, options.skipAuth);
     let reqBody: string | undefined = undefined;
     if (body !== undefined) {
       if (typeof body === 'string') {
@@ -215,6 +347,10 @@ export class TestClient {
       '/api/roi': 'app/api/roi/route',
       '/api/waitlist': 'app/api/waitlist/route',
       '/api/inquiries': 'app/api/inquiries/route',
+      '/api/auth/login': 'app/api/auth/login/route',
+      '/api/auth/logout': 'app/api/auth/logout/route',
+      '/api/auth/session': 'app/api/auth/session/route',
+      '/api/people': 'app/api/people/route',
     };
 
     if (staticMap[cleanPath]) {
@@ -256,6 +392,7 @@ export class TestClient {
   }
 
   private async parseResponse<T>(res: Response): Promise<TestResponse<T>> {
+    this.captureSetCookies(res.headers);
     let data: any = null;
     const contentType = res.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
@@ -284,17 +421,68 @@ export class TestClient {
 
 export const testClient = new TestClient();
 
+export function createTestClient(baseUrl?: string, options?: TestClientOptions): TestClient {
+  return new TestClient(baseUrl, options);
+}
+
 /**
  * DB helper for test isolation
  */
 export function resetDatabase(dbPath?: string): void {
+  resetLoginAttemptTracker();
+  clearRevokedSessionTokens();
+
+  let db: Database | null = null;
   try {
-    const target = dbPath || process.env.DATABASE_URL || 'grovia.db';
-    const db = new Database(target);
-    db.run('DELETE FROM waitlist;');
-    db.run('DELETE FROM inquiries;');
-    db.close();
-  } catch {
-    // Database tables might not be created yet
+    const configuredTarget =
+      dbPath ||
+      process.env.DB_PATH ||
+      process.env.DATABASE_PATH ||
+      process.env.DATABASE_URL;
+    const target = configuredTarget || DEFAULT_TEST_DB_PATH;
+    if (!configuredTarget) {
+      process.env.DB_PATH = target;
+    }
+    if (path.resolve(target) === path.resolve(DEFAULT_TEST_DB_PATH)) {
+      registerDefaultTestDbCleanup();
+    }
+
+    const resolvedBaseName = path.basename(path.resolve(target)).toLowerCase();
+    if (resolvedBaseName === 'grovia.db' && process.env.ALLOW_TEST_RESET_MAIN_DB !== '1') {
+      throw new Error(
+        `Refusing to reset primary database "${target}". Set DB_PATH to an isolated test database path or set ALLOW_TEST_RESET_MAIN_DB=1 explicitly.`
+      );
+    }
+
+    db = new Database(target);
+    const existingTables = db
+      .query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('waitlist', 'inquiries', 'users', 'people')"
+      )
+      .all();
+    const tableSet = new Set(existingTables.map((row) => row.name));
+
+    if (tableSet.has('waitlist')) {
+      db.run('DELETE FROM waitlist;');
+    }
+    if (tableSet.has('inquiries')) {
+      db.run('DELETE FROM inquiries;');
+    }
+    if (tableSet.has('users')) {
+      db.run('DELETE FROM users WHERE LOWER(email) != ?;', [resolveAdminEmail()]);
+    }
+    if (tableSet.has('people')) {
+      db.run("DELETE FROM people WHERE id NOT IN ('0','1','2','3','4','5','6','7','8','9');");
+    }
+    initSchema(db);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!message.includes('no such table')) {
+      throw err;
+    }
+  } finally {
+    try {
+      db?.close();
+    } catch {}
   }
 }

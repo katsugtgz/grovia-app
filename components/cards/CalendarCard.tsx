@@ -6,7 +6,12 @@ import { $, isReducedMotion } from '@/lib/motion';
 import { Icon } from '@/components/ui/Icon';
 import { triggerToast } from '@/lib/toast';
 import { no } from '@/lib/template-core';
-import { INITIAL_PEOPLE } from '@/lib/data';
+import { DEFAULT_AVATAR_COLOR } from '@/lib/data';
+import type { Person } from '@/lib/types';
+
+export interface CalendarCardProps {
+  people?: Person[];
+}
 
 export interface CalendarEvent {
   id: string;
@@ -17,7 +22,7 @@ export interface CalendarEvent {
   title: string;
   sub: string;
   tone: string;
-  who: number[];
+  who: string[];
 }
 
 export interface CalendarWeek {
@@ -42,7 +47,7 @@ const WEEKS: CalendarWeek[] = [
         title: 'Design crit',
         sub: 'Pricing page v3',
         tone: 'dark',
-        who: [0, 5],
+        who: ['0', '5'],
       },
       {
         id: 'w0-e1',
@@ -53,7 +58,7 @@ const WEEKS: CalendarWeek[] = [
         title: 'Payroll close',
         sub: 'September run',
         tone: 'honey',
-        who: [4],
+        who: ['4'],
       },
     ],
   },
@@ -72,7 +77,7 @@ const WEEKS: CalendarWeek[] = [
         title: 'Weekly team sync',
         sub: 'Priorities for the sprint',
         tone: 'dark',
-        who: [4, 2, 6],
+        who: ['4', '2', '6'],
       },
       {
         id: 'w1-e1',
@@ -83,7 +88,7 @@ const WEEKS: CalendarWeek[] = [
         title: 'Onboarding session',
         sub: 'Welcome Person 02 & Person 04',
         tone: '',
-        who: [1, 3],
+        who: ['1', '3'],
       },
       {
         id: 'w1-e2',
@@ -94,7 +99,7 @@ const WEEKS: CalendarWeek[] = [
         title: '1:1 with Person 01',
         sub: 'Growth plan',
         tone: 'honey',
-        who: [0],
+        who: ['0'],
       },
     ],
   },
@@ -111,7 +116,7 @@ const WEEKS: CalendarWeek[] = [
         title: 'Q4 kickoff',
         sub: 'All hands · Studio',
         tone: 'dark',
-        who: [4, 0, 8],
+        who: ['4', '0', '8'],
       },
       {
         id: 'w2-e1',
@@ -122,7 +127,7 @@ const WEEKS: CalendarWeek[] = [
         title: 'Offsite planning',
         sub: 'Porto, November',
         tone: '',
-        who: [7, 9],
+        who: ['7', '9'],
       },
     ],
   },
@@ -131,7 +136,9 @@ const WEEKS: CalendarWeek[] = [
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const TIME_LABELS = ['8:00 am', '9:00 am', '10:00 am', '11:00 am'];
 
-export function CalendarCard() {
+const EMPTY_PEOPLE: Person[] = [];
+
+export function CalendarCard({ people = EMPTY_PEOPLE }: CalendarCardProps) {
   const cardRef = useRef<HTMLElement>(null);
   const calGridRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -162,8 +169,14 @@ export function CalendarCard() {
     }
   };
 
-  // Entrance animation when week changes
+  // Entrance animation when week changes after initial mount. Track the last
+  // animated week (initialized to the initial week) instead of a boolean mount
+  // flag: in StrictMode the mount effect runs twice, and the second run sees no
+  // week change and returns without replaying the entrance.
+  const lastAnimatedWeekRef = useRef(weekIdx);
   useEffect(() => {
+    if (lastAnimatedWeekRef.current === weekIdx) return;
+    lastAnimatedWeekRef.current = weekIdx;
     if (isReducedMotion() || !calGridRef.current || !titleRef.current) return;
 
     const dynEls = calGridRef.current.querySelectorAll('.cal__dyn');
@@ -314,15 +327,16 @@ export function CalendarCard() {
               <small>{ev.sub}</small>
             </span>
             <span className="avatars">
-              {ev.who.map((personIdx) => {
-                const person = INITIAL_PEOPLE[personIdx];
+              {ev.who.map((personId) => {
+                const person = people.find((p) => p.id === personId);
+                const av = person?.av ?? DEFAULT_AVATAR_COLOR;
                 return (
                   <span
-                    key={`ev-av-${ev.id}-${personIdx}`}
+                    key={`ev-av-${ev.id}-${personId}`}
                     className="avatar"
-                    style={{ '--av': person.av } as React.CSSProperties}
+                    style={{ '--av': av } as React.CSSProperties}
                     aria-hidden="true"
-                    dangerouslySetInnerHTML={{ __html: no(person.look, person.av) }}
+                    dangerouslySetInnerHTML={{ __html: no(person?.look, av) }}
                   />
                 );
               })}

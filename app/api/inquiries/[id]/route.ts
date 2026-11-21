@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { InquiryPatchRequestSchema } from '@/lib/validations';
 import { updateInquiry } from '@/lib/db';
 import { methodNotAllowed, parseJsonBody } from '@/lib/api-helpers';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,9 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ): Promise<Response> {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
+
   const { id } = await context.params;
   if (!id) {
     return NextResponse.json(

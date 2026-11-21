@@ -4,6 +4,33 @@ All notable changes to **Grovia** are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Public Landing Page (`/`) & Login (`/login`)**: Public marketing landing experience with Bento feature highlights, pricing tiers, waitlist signup (`POST /api/waitlist`), route metadata/OpenGraph, and PII-free client bundles.
+- **Protected Workspace (`/workspace`) & Edge Middleware (`middleware.ts`)**: Authenticated Bento workspace with server-side `getServerSession()` defense-in-depth, SQLite-backed `people` directory and teammate invites (`GET`/`POST /api/people`), profile/sign-out menu, and `Book a demo` modal trigger.
+- **Expanded Verification Suite**: Verified `384 / 384` passing tests across `48` suites (unit, contract, stress, and 75 live HTTP E2E tests across Tiers 1–4) plus `100 / 100` on `react-doctor`.
+
+### Changed
+
+- **LCP Shell Optimization**: Replaced the initial 1.6s cascading opacity entrance delay with an immediate zero-opacity-delay shell render (`useEntranceTimeline`) while preserving interactive GSAP view transitions, Flip filter morphing, and micro-interactions.
+
+### Fixed
+
+- Workspace navigation cancels superseded animations; payroll keeps the same person and demo hours when People is reordered or updated.
+- JSON request limits count raw bytes as they arrive. Login callbacks unlock the form when they do not navigate.
+- **JSON Snapshots**: Corrupt fallback snapshots (malformed JSON, invalid counters, duplicate rows) are rejected instead of loaded or overwritten, preserving the operator's data.
+- **Administrator Setup**: Email collisions with the configured administrator are rejected before seed writes instead of silently reusing an existing account.
+
+### Security
+
+- **Authentication & Session Hardening**: Explicit encoded scrypt cost parameters (`scrypt:N:r:p:salt:hash`) with non-blocking async `crypto.scrypt` verification, unique per-login `jti` HMAC-SHA256 `grovia_session` tokens, fail-closed production secret enforcement, verified server-side logout token revocation, bounded per-IP and per-email login rate limiting, and production gating of demo admin seeding/access.
+  Logout revocation and login rate limits are stored in process memory and are not shared across instances. Multi-instance or serverless deployments need a shared store to enforce both consistently.
+- **Login Reservations**: In-progress sign-ins keep their place while the rate limiter is full, instead of losing their reservation when a request fails.
+- **Signed Revocation**: Logout revocations persist until the session's signed expiry instead of a fixed window.
+- **Credential Normalization**: Harmless whitespace changes (and letter-case changes in the configured email) no longer sign out active administrators.
+
 ## [0.1.0] - 2026-11-17
 
 ### Added

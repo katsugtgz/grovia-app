@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, beforeEach, afterAll } from 'bun:test';
 import { testClient } from '../harness/test-client';
 import { assertions } from '../harness/assertions';
 import fs from 'node:fs';
@@ -6,6 +6,14 @@ import path from 'node:path';
 
 describe('Tier 4 — Real-World Scenario: System Health & Audit Readiness Flow', () => {
   const rootDir = process.cwd();
+
+  beforeEach(() => {
+    testClient.clearAuth();
+  });
+
+  afterAll(() => {
+    testClient.clearAuth();
+  });
 
   test('T4.4.1: System health audit: System status is "ok", runtime "bun", database "healthy"', async () => {
     const res = await testClient.get('/api/health');
@@ -22,6 +30,7 @@ describe('Tier 4 — Real-World Scenario: System Health & Audit Readiness Flow',
   });
 
   test('T4.4.3: SaaS metrics audit: Benchmark ranges and workday averages comply with specifications', async () => {
+    await testClient.loginAsAdmin();
     const res = await testClient.get('/api/metrics');
     assertions.assertOk(res);
     assertions.assertMetricsResponse(res.data);

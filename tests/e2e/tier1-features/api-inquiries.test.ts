@@ -1,11 +1,16 @@
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterAll } from 'bun:test';
 import { testClient, resetDatabase } from '../harness/test-client';
 import { fixtures, createRandomEmail } from '../harness/fixtures';
 import { assertions } from '../harness/assertions';
 
 describe('Tier 1 — F11: Inquiries Management Endpoint', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetDatabase();
+    await testClient.loginAsAdmin();
+  });
+
+  afterAll(() => {
+    testClient.clearAuth();
   });
 
   test('T1.5.1: POST /api/inquiries creates ticket and returns 200/201 with success', async () => {

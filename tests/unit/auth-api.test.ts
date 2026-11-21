@@ -122,6 +122,11 @@ describe('Unit & Contract — M1 Auth, People & API Access Control', () => {
       expect(await verifyPassword('password', 'scrypt:nothex!:abcd')).toBe(false);
       expect(await verifyPassword('password', 'scrypt:abcd:1234')).toBe(false);
     });
+
+    test('rejects scrypt costs that exceed 64 MiB after working buffers are included', async () => {
+      const hash = `scrypt:65536:8:1:${'aa'.repeat(16)}:${'bb'.repeat(64)}`;
+      expect(await verifyPassword('password', hash)).toBe(false);
+    });
   });
 
   describe('Edge Token, Redirect & Request Helpers (lib/auth-edge.ts)', () => {

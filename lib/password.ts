@@ -60,7 +60,8 @@ function parseStoredScryptHash(storedHash: string): ParsedScryptHash | null {
       !Number.isInteger(p) ||
       p < 1 ||
       p > 16 ||
-      128 * n * r > MAX_MEM
+      // Count the N table blocks, p input blocks, and OpenSSL's two scratch blocks.
+      128 * r * (n + p + 2) > MAX_MEM
     ) {
       return null;
     }
@@ -142,23 +143,23 @@ export async function verifyPassword(password: string, storedHash: string): Prom
   const parsed = parseStoredScryptHash(storedHash);
   if (!parsed) return false;
 
-  const { promise: actual, resolve, reject } = Promise.withResolvers<Buffer>();
-  scryptCallback(
-    password,
-    parsed.salt,
-    parsed.expected.length,
-    {
-      N: parsed.n,
-      r: parsed.r,
-      p: parsed.p,
-      maxmem: MAX_MEM,
-    },
-    (err, derivedKey) => {
-      if (err) reject(err);
-      else resolve(derivedKey);
-    }
-  );
-  const derived = await actual;
+  const derived = await new Promise<Buffer>((resolve, reject) => {
+    scryptCallback(
+      password,
+      parsed.salt,
+      parsed.expected.length,
+      {
+        N: parsed.n,
+        r: parsed.r,
+        p: parsed.p,
+        maxmem: MAX_MEM,
+      },
+      (err, derivedKey) => {
+        if (err) reject(err);
+        else resolve(derivedKey);
+      }
+    );
+  });
   if (derived.length !== parsed.expected.length) return false;
   return timingSafeEqual(derived, parsed.expected);
 }

@@ -33,17 +33,19 @@ jobs:
           NETLIFY_DB_PATH: ${{ vars.NETLIFY_DB_PATH }}
         run: |
           if [ -n "$NETLIFY_AUTH_TOKEN" ] && [ -n "$NETLIFY_SITE_ID" ]; then
-            if [ -n "$AUTH_SECRET" ]; then
-              bunx netlify-cli env:set AUTH_SECRET "$AUTH_SECRET" --site "$NETLIFY_SITE_ID" --context production --force --secret
+            if [ -z "$AUTH_SECRET" ]; then
+              echo "::error::AUTH_SECRET secret is required for production deployments."
+              exit 1
             fi
+            bunx netlify-cli env:set AUTH_SECRET "$AUTH_SECRET" --site "$NETLIFY_SITE_ID" --context production --force --secret
             if [ -n "$ADMIN_PASSWORD" ]; then
               bunx netlify-cli env:set ADMIN_PASSWORD "$ADMIN_PASSWORD" --site "$NETLIFY_SITE_ID" --context production --force --secret
             fi
-            if [ -n "$ALLOW_DEMO_ADMIN" ]; then
-              bunx netlify-cli env:set ALLOW_DEMO_ADMIN "$ALLOW_DEMO_ADMIN" --site "$NETLIFY_SITE_ID" --context production --force
+            ALLOW_DEMO_ADMIN_VAL="${ALLOW_DEMO_ADMIN:-0}"
+            bunx netlify-cli env:set ALLOW_DEMO_ADMIN "$ALLOW_DEMO_ADMIN_VAL" --site "$NETLIFY_SITE_ID" --context production --force
+            if [ -n "$NETLIFY_DB_PATH" ]; then
+              bunx netlify-cli env:set DB_PATH "$NETLIFY_DB_PATH" --site "$NETLIFY_SITE_ID" --context production --force
             fi
-            DB_TARGET="${NETLIFY_DB_PATH:-/tmp/grovia.db}"
-            bunx netlify-cli env:set DB_PATH "$DB_TARGET" --site "$NETLIFY_SITE_ID" --context production --force
           else
             echo "Netlify secrets not configured; skipping environment sync."
           fi

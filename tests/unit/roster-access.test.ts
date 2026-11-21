@@ -119,7 +119,7 @@ describe('Roster access & demo-visibility policy (server-side contract)', () => 
       expect(await showsDefaultDemoCredentials()).toBe(false);
 
       // Stale persisted password: an ADMIN_PASSWORD override seeded the row,
-      // then the override was removed. Saved passwords are never reset, so the
+      // then the override was removed. The row keeps the rotated hash, so the
       // hint must stay hidden even though config again looks like defaults.
       closeDb();
       env.NODE_ENV = 'development';

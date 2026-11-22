@@ -1,11 +1,36 @@
 import { NextResponse } from 'next/server';
 import { WaitlistRequestSchema } from '@/lib/validations';
-import { addWaitlistEntry, getWaitlist, getWaitlistCount } from '@/lib/db';
+import {
+  addWaitlistEntry,
+  getWaitlist,
+  getWaitlistCount,
+  isRosterAdminSession,
+} from '@/lib/db';
 import { methodNotAllowed, parseJsonBody } from '@/lib/api-helpers';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
+
+  // Same single admin policy as the roster API and workspace shell: admin
+  // role plus the private-mode/demo-mode identity checks — no divergent
+  // secondary path.
+  if (!isRosterAdminSession(auth.user)) {
+    return NextResponse.json(
+      { success: false, error: 'Forbidden' },
+      {
+        status: 403,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    );
+  }
+
   try {
     const count = getWaitlistCount();
     const list = getWaitlist(100);

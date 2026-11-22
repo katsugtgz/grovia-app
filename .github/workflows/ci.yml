@@ -9,8 +9,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      npm_config_yes: "true"
     steps:
       - uses: actions/checkout@v4
 
@@ -33,6 +31,3 @@ jobs:
 
       - name: Build Next.js application
         run: bun run build
-
-      - name: React Doctor Gate
-        run: npx react-doctor@latest --score

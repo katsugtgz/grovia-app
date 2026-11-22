@@ -10,6 +10,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests/core.test.ts",
+    "test:all": "bun test",
     "test:m1": "bun test tests/core.test.ts tests/e2e/tier1-features/api-health.test.ts tests/e2e/tier1-features/template-core.test.ts tests/e2e/tier1-features/tooling-structure.test.ts tests/e2e/tier1-features/views-contracts.test.ts tests/e2e/tier2-boundaries/boundary-template-core.test.ts",
     "test:e2e": "bun test tests/e2e/",
     "doctor": "npx react-doctor@latest",

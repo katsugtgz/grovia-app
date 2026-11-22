@@ -1,0 +1,39 @@
+# React Doctor: security, performance, correctness, accessibility, bundle-size,
+# and architecture checks for React.
+# This workflow is the CI React Doctor gate; ci.yml runs the required test job.
+#
+# These settings were written by `react-doctor ci config`. Run it again to change them.
+# Docs: https://www.react.doctor/ci
+
+name: React Doctor
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  statuses: write
+
+concurrency:
+  group: react-doctor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  react-doctor:
+    runs-on: ubuntu-latest
+    steps:
+      # Full git history enables PR diff mapping for inline comments while `scope: full` scans the entire project to enforce a 100/100 zero-warning gate.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: millionco/react-doctor@695e46eee203a5d1855020191aa7e9c010a1250e # v2
+        with:
+          version: '0.9.23'
+          blocking: warning
+          scope: full

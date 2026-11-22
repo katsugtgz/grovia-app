@@ -26,6 +26,14 @@ export function SettingsModal({
   const [day, setDay] = useState(initialDay);
 
   useEffect(() => {
+    setName(initialName);
+  }, [initialName]);
+
+  useEffect(() => {
+    setDay(initialDay);
+  }, [initialDay]);
+
+  useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
 

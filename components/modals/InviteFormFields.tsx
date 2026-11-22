@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Icon } from '@/components/ui/Icon';
+import { PEOPLE_TEAMS } from '@/lib/validations';
 
 export interface InviteFormFieldsProps {
   name: string;
@@ -19,6 +20,7 @@ export interface InviteFormFieldsProps {
   setCity: (v: string) => void;
   errors: { name?: string; email?: string; role?: string };
   onClose: () => void;
+  isSubmitting?: boolean;
 }
 
 export function InviteFormFields({
@@ -37,6 +39,7 @@ export function InviteFormFields({
   setCity,
   errors,
   onClose,
+  isSubmitting = false,
 }: InviteFormFieldsProps) {
   return (
     <>
@@ -52,6 +55,7 @@ export function InviteFormFields({
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
+          disabled={isSubmitting}
           aria-invalid={!!errors.name}
           aria-describedby={errors.name ? 'invite-form-name-error' : undefined}
         />
@@ -75,6 +79,7 @@ export function InviteFormFields({
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          disabled={isSubmitting}
           aria-invalid={!!errors.email}
           aria-describedby={errors.email ? 'invite-form-email-error' : undefined}
         />
@@ -98,6 +103,7 @@ export function InviteFormFields({
             required
             value={role}
             onChange={(e) => setRole(e.target.value)}
+            disabled={isSubmitting}
             aria-invalid={!!errors.role}
             aria-describedby={errors.role ? 'invite-form-role-error' : undefined}
           />
@@ -116,11 +122,13 @@ export function InviteFormFields({
             name="team"
             value={team}
             onChange={(e) => setTeam(e.target.value)}
+            disabled={isSubmitting}
           >
-            <option value="Design">Design</option>
-            <option value="Engineering">Engineering</option>
-            <option value="Product">Product</option>
-            <option value="Operations">Operations</option>
+            {PEOPLE_TEAMS.map((teamOption) => (
+              <option key={teamOption} value={teamOption}>
+                {teamOption}
+              </option>
+            ))}
           </select>
         </label>
       </div>
@@ -137,6 +145,7 @@ export function InviteFormFields({
           placeholder="Remote"
           value={city}
           onChange={(e) => setCity(e.target.value)}
+          disabled={isSubmitting}
         />
       </label>
 
@@ -145,13 +154,14 @@ export function InviteFormFields({
           className="chip-btn"
           type="button"
           data-close
+          disabled={isSubmitting}
           onClick={onClose}
         >
           Cancel
         </button>
-        <button className="dark-btn" type="submit">
+        <button className="dark-btn" type="submit" disabled={isSubmitting}>
           <Icon name="user-plus" className="ico" aria-hidden="true" />
-          Send invite
+          {isSubmitting ? 'Sending...' : 'Send invite'}
         </button>
       </footer>
     </>

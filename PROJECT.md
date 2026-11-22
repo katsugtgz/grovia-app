@@ -22,7 +22,7 @@
 | 9 | ROI & Growth Calculator Endpoint | `POST /api/roi` computing projected revenue, conversion lift, ROI trajectory | M2 | survey |
 | 10 | Waitlist Booking Endpoint | `GET & POST /api/waitlist` with Zod validation, deduplication, persistent store | M2 | survey |
 | 11 | Inquiries Management Endpoint | `GET, POST, PATCH /api/inquiries` ticketing system with status workflow | M2 | survey |
-| 12 | App Entrance Choreography | Cascading 1.6s entrance timeline (`power3.out`, `back.out(2)`, `power4.out` text split) | M3 | survey |
+| 12 | App Entrance Choreography | Immediate zero-opacity-delay shell render (LCP optimization) preserving interactive GSAP view transitions & micro-interactions | M3 | survey |
 | 13 | Overview View & Bento Grid | Full Overview dashboard: animated greeting, hiring rail, stats counter row | M3 | survey |
 | 14 | Profile Bento Card | Portrait avatar, role, glass compensation chip with 3D parallax tilt physics | M3 | survey |
 | 15 | Progress Bento Card | Workday average (6.6h), interactive 7-day bar chart with animated tooltip | M3 | survey |
@@ -39,6 +39,10 @@
 | 26 | E2E Test Suite Validation | 100% pass on 4 tiers of requirement-driven opaque-box E2E tests | M5 | survey |
 | 27 | Adversarial Hardening (Tier 5) | White-box edge-case and boundary verification | M5 | survey |
 | 28 | Final react-doctor Quality Gate | `npx react-doctor@latest` achieves 100 score with all green status | M5 | survey |
+| 29 | Public Landing Page (`/`) & PII Exclusion | Public landing at `/` (`components/landing/LandingPage.tsx`), `<header>` + `<main>` landmarks, zero employee PII in public JS bundles | M6 | v2 |
+| 30 | Login (`/login`) & Session Engine | Web Crypto HMAC-SHA256 `grovia_session` cookie (`lib/auth-edge.ts`), async `scrypt` password verification (`lib/password.ts`), `POST /api/auth/{login,logout}`, `GET /api/auth/session` | M6 | v2 |
+| 31 | Protected Workspace (`/workspace`) & Edge Middleware | `middleware.ts` (`307` redirects & `401` API guards), `app/workspace/page.tsx` + `components/WorkspaceShell.tsx`, `GET/POST /api/people`, `InviteModal` & `Header` sign-out wiring | M6 | v2 |
+| 32 | Live HTTP E2E Suite (`tests/e2e/v2/`) | 75 opaque-box live-HTTP E2E tests across Tiers 1–4 (`tests/e2e/v2/**/*.test.ts` + `tests/e2e/harness/live-http.ts`) | M6 | v2 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
@@ -48,6 +52,7 @@
 | M3 | UI Views, Bento Grid & Motion | Features 12-23: Overview, People, Payroll, Bento cards, Stopwatch, Modals, GSAP animations | M1, M2 | DONE |
 | M4 | GitHub Repo & CI/CD | Features 24-25: Public repository creation, GitHub Actions CI/CD workflow | M1, M2, M3 | DONE |
 | M5 | E2E Test Pass & react-doctor Gate | Features 26-28: 100% E2E tests pass (Tiers 1-4), Tier 5 adversarial, react-doctor 100 | M1-M4, E2E | DONE |
+| M6 | Landing, Login, Protected Workspace & Live HTTP E2E | Features 29-32: `/`, `/login`, `/workspace`, `middleware.ts`, `grovia_session` auth, 384/384 tests pass across 48 suites, react-doctor 100 | M1-M5 | DONE |
 
 ## Interface Contracts
 

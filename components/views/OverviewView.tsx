@@ -11,20 +11,39 @@ import { OnboardingCard } from '@/components/cards/OnboardingCard';
 import { AccordionCard } from '@/components/cards/AccordionCard';
 import { CalendarCard } from '@/components/cards/CalendarCard';
 import { GrowthRoiCard } from '@/components/cards/GrowthRoiCard';
+import type { Person } from '@/lib/types';
 
 export interface OverviewViewProps {
   active: boolean;
   greetingName?: string;
+  workdayHours?: number;
+  people?: Person[];
+  onOpenDemo?: () => void;
 }
 
-export function OverviewView({ active, greetingName = 'Person 05' }: OverviewViewProps) {
+const EMPTY_PEOPLE: Person[] = [];
+
+export function OverviewView({
+  active,
+  greetingName = 'Person 05',
+  workdayHours = 8,
+  people = EMPTY_PEOPLE,
+  onOpenDemo,
+}: OverviewViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const prevStateRef = useRef({ active, greetingName });
 
   const greetingText = `Good morning, ${greetingName}`;
 
-  // Character split animation on mount or active change
+  // Character split animation on active/greeting change after initial SSR paint
   useEffect(() => {
+    const prev = prevStateRef.current;
+    const changed = prev.active !== active || prev.greetingName !== greetingName;
+    prevStateRef.current = { active, greetingName };
+    if (!changed) {
+      return;
+    }
     if (!active || isReducedMotion() || !titleRef.current) return;
 
     const chars = titleRef.current.querySelectorAll('.split-ch');
@@ -157,14 +176,14 @@ export function OverviewView({ active, greetingName = 'Person 05' }: OverviewVie
       <div className="bento">
         <ProfileCard />
         <ProgressCard />
-        <TimeTrackerCard />
+        <TimeTrackerCard workdayHours={workdayHours} />
         <OnboardingCard />
         <AccordionCard />
-        <CalendarCard />
+        <CalendarCard people={people} />
       </div>
 
       <div style={{ marginTop: 'var(--gap)' }}>
-        <GrowthRoiCard />
+        <GrowthRoiCard onOpenDemo={onOpenDemo} />
       </div>
     </div>
   );

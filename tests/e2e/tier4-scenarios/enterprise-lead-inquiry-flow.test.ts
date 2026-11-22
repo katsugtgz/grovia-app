@@ -1,11 +1,16 @@
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterAll } from 'bun:test';
 import { testClient, resetDatabase } from '../harness/test-client';
-import { fixtures, createRandomEmail } from '../harness/fixtures';
+import { createRandomEmail } from '../harness/fixtures';
 import { assertions } from '../harness/assertions';
 
 describe('Tier 4 — Real-World Scenario: Enterprise Lead & Support Lifecycle', () => {
   beforeEach(() => {
     resetDatabase();
+    testClient.clearAuth();
+  });
+
+  afterAll(() => {
+    testClient.clearAuth();
   });
 
   test('T4.1.1: Pre-flight discovery: Health check confirms system and database are healthy', async () => {
@@ -16,6 +21,7 @@ describe('Tier 4 — Real-World Scenario: Enterprise Lead & Support Lifecycle', 
   });
 
   test('T4.1.2: Enterprise contact submission: High-priority inquiry ingested successfully', async () => {
+    await testClient.loginAsAdmin();
     const leadEmail = createRandomEmail('ent_lead');
     const inquiryPayload = {
       name: 'Victoria Stirling',
@@ -47,6 +53,7 @@ describe('Tier 4 — Real-World Scenario: Enterprise Lead & Support Lifecycle', 
   });
 
   test('T4.1.4: Ticket progression & resolution: Support team triages and resolves ticket', async () => {
+    await testClient.loginAsAdmin();
     const email = createRandomEmail('triage');
     const inqRes = await testClient.post('/api/inquiries', {
       name: 'Operations Lead',

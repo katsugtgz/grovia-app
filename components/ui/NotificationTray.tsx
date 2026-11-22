@@ -3,37 +3,48 @@
 import React, { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { $ } from '@/lib/motion';
+import type { Person } from '@/lib/types';
+import { DEFAULT_AVATAR_COLOR } from '@/lib/data';
 import { Icon } from './Icon';
 import { no } from '@/lib/template-core';
-import { INITIAL_PEOPLE } from '@/lib/data';
 
 export interface NotificationTrayProps {
   isOpen: boolean;
   onClose: () => void;
+  people?: Person[];
 }
 
-const NOTIFICATIONS = [
+const NOTIFICATION_ITEMS = [
   {
-    personIndex: 1,
-    person: INITIAL_PEOPLE[1],
+    personId: '1',
+    fallbackId: 'notif-1',
+    fallbackName: 'Team member',
     action: 'accepted the offer',
     time: '2 min ago',
   },
   {
-    personIndex: 2,
-    person: INITIAL_PEOPLE[2],
+    personId: '2',
+    fallbackId: 'notif-2',
+    fallbackName: 'Team member',
     action: 'booked Friday off',
     time: '1 h ago',
   },
   {
-    personIndex: 3,
-    person: INITIAL_PEOPLE[3],
+    personId: '3',
+    fallbackId: 'notif-3',
+    fallbackName: 'Team member',
     action: 'finished access setup',
     time: '3 h ago',
   },
-];
+] as const;
 
-export function NotificationTray({ isOpen, onClose }: NotificationTrayProps) {
+const EMPTY_PEOPLE: Person[] = [];
+
+export function NotificationTray({
+  isOpen,
+  onClose,
+  people = EMPTY_PEOPLE,
+}: NotificationTrayProps) {
   const trayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -130,20 +141,27 @@ export function NotificationTray({ isOpen, onClose }: NotificationTrayProps) {
       </header>
 
       <ul className="tray__list">
-        {NOTIFICATIONS.map(({ person, action, time }) => (
-          <li key={person.id}>
-            <span
-              className="avatar"
-              style={{ '--av': person.av } as React.CSSProperties}
-              aria-hidden="true"
-              dangerouslySetInnerHTML={{ __html: no(person.look, person.av) }}
-            />
-            <p>
-              <b>{person.name}</b> {action}
-              <small>{time}</small>
-            </p>
-          </li>
-        ))}
+        {NOTIFICATION_ITEMS.map(({ personId, fallbackId, fallbackName, action, time }) => {
+          const person = people.find((p) => p.id === personId);
+          const itemKey = person?.id ?? fallbackId;
+          const av = person?.av ?? DEFAULT_AVATAR_COLOR;
+          const name = person?.name ?? fallbackName;
+
+          return (
+            <li key={itemKey}>
+              <span
+                className="avatar"
+                style={{ '--av': av } as React.CSSProperties}
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{ __html: no(person?.look, av) }}
+              />
+              <p>
+                <b>{name}</b> {action}
+                <small>{time}</small>
+              </p>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

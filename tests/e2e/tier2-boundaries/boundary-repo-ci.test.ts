@@ -5,8 +5,9 @@ import path from 'node:path';
 describe('Tier 2 — Boundary: GitHub Actions CI/CD Pipeline & Repository Contracts (F24-F25)', () => {
   const rootDir = process.cwd();
   const ciPath = path.resolve(rootDir, '.github/workflows/ci.yml');
+  const doctorPath = path.resolve(rootDir, '.github/workflows/react-doctor.yml');
 
-  test('T2.10.1: CI workflow step validation: defines strict order from setup to quality gate', () => {
+  test('T2.10.1: CI workflow preserves setup, check, test, and build order', () => {
     expect(fs.existsSync(ciPath)).toBe(true);
     const ciContent = fs.readFileSync(ciPath, 'utf8');
 
@@ -18,7 +19,6 @@ describe('Tier 2 — Boundary: GitHub Actions CI/CD Pipeline & Repository Contra
       'bun run typecheck',
       'bun test',
       'bun run build',
-      'npx react-doctor@latest',
     ];
 
     let lastIndex = -1;
@@ -59,8 +59,12 @@ describe('Tier 2 — Boundary: GitHub Actions CI/CD Pipeline & Repository Contra
     expect(ciContent).toContain('bun install --frozen-lockfile');
   });
 
-  test('T2.10.7: React Doctor quality gate step executes in CI pipeline', () => {
+  test('T2.10.7: The separate workflow owns the only React Doctor gate', () => {
     const ciContent = fs.readFileSync(ciPath, 'utf8');
-    expect(ciContent).toContain('npx react-doctor@latest --score');
+    const doctorContent = fs.readFileSync(doctorPath, 'utf8');
+    expect(ciContent).not.toContain('react-doctor');
+    expect(doctorContent).toMatch(/uses: millionco\/react-doctor@[a-f0-9]{40}\b/);
+    expect(doctorContent).toContain('blocking: warning');
+    expect(doctorContent).toContain('scope: full');
   });
 });

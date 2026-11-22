@@ -107,3 +107,63 @@ export const InquiryPatchRequestSchema = z
   });
 
 export type InquiryPatchInput = z.infer<typeof InquiryPatchRequestSchema>;
+
+// ==========================================
+// Auth & People Schemas
+// ==========================================
+
+export const LoginRequestSchema = z.object({
+  email: z
+    .string({ required_error: 'email is required' })
+    .trim()
+    .email('Invalid email address')
+    .max(255, 'Email must not exceed 255 characters')
+    .toLowerCase(),
+  password: z
+    .string({ required_error: 'password is required' })
+    .min(1, 'Password is required')
+    .max(1000, 'Password must not exceed 1000 characters'),
+});
+
+export type LoginInput = z.infer<typeof LoginRequestSchema>;
+
+export const PEOPLE_TEAMS = ['Design', 'Engineering', 'Product', 'Operations'] as const;
+
+export const InvitePersonRequestSchema = z.object({
+  name: z
+    .string({ required_error: 'name is required' })
+    .trim()
+    .min(1, 'Name must be at least 1 character')
+    .max(200, 'Name must not exceed 200 characters'),
+  email: z
+    .string({ required_error: 'email is required' })
+    .trim()
+    .email('Invalid email address')
+    .max(255, 'Email must not exceed 255 characters')
+    .toLowerCase(),
+  role: z
+    .string({ required_error: 'role is required' })
+    .trim()
+    .min(1, 'Role is required')
+    .max(200, 'Role must not exceed 200 characters'),
+  team: z.enum(PEOPLE_TEAMS, {
+    errorMap: () => ({
+      message: 'Team must be Design, Engineering, Product, or Operations',
+    }),
+  }),
+  city: z
+    .string()
+    .trim()
+    .max(120, 'City must not exceed 120 characters')
+    .optional()
+    .transform((val) => (val && val.length > 0 ? val : 'Remote')),
+  rate: z
+    .number({ invalid_type_error: 'rate must be a number' })
+    .min(0, 'rate must be non-negative')
+    .max(10000, 'rate must not exceed 10000')
+    .finite('rate must be finite')
+    .optional()
+    .default(40),
+});
+
+export type InvitePersonInput = z.infer<typeof InvitePersonRequestSchema>;

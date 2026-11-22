@@ -6,6 +6,7 @@ import { Flip } from 'gsap/Flip';
 import { $, isReducedMotion } from '@/lib/motion';
 import { Icon } from '@/components/ui/Icon';
 import type { Person } from '@/lib/types';
+import { PEOPLE_TEAMS } from '@/lib/validations';
 import { triggerToast } from '@/lib/toast';
 import { PeopleTable } from './people/PeopleTable';
 import { PeopleActionTray } from './people/PeopleActionTray';
@@ -18,10 +19,11 @@ if (typeof window !== 'undefined') {
 export interface PeopleViewProps {
   active: boolean;
   people: Person[];
-  onOpenInvite: () => void;
+  /** Open the invite dialog; omit when the session may not invite (e.g. non-admin). */
+  onOpenInvite?: () => void;
 }
 
-const TEAMS = ['all', 'Design', 'Engineering', 'Product', 'Operations'] as const;
+const TEAMS = ['all', ...PEOPLE_TEAMS] as const;
 
 export function PeopleView({ active, people, onOpenInvite }: PeopleViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -30,7 +32,10 @@ export function PeopleView({ active, people, onOpenInvite }: PeopleViewProps) {
 
   const [query, setQuery] = useState('');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set([people[0]?.id || '0']));
+  const [selectedIds, setSelectedIds] = useState(() => {
+    const firstPerson = people[0];
+    return new Set(firstPerson ? [firstPerson.id] : []);
+  });
 
   // Compute team counts
   const teamCounts = useMemo(() => {
@@ -232,15 +237,17 @@ export function PeopleView({ active, people, onOpenInvite }: PeopleViewProps) {
             />
           </label>
 
-          <button
-            className="dark-btn magnetic"
-            type="button"
-            id="add-member"
-            onClick={onOpenInvite}
-          >
-            <Icon name="plus" className="ico" aria-hidden="true" />
-            Add member
-          </button>
+          {onOpenInvite && (
+            <button
+              className="dark-btn magnetic"
+              type="button"
+              id="add-member"
+              onClick={onOpenInvite}
+            >
+              <Icon name="plus" className="ico" aria-hidden="true" />
+              Add member
+            </button>
+          )}
         </div>
       </div>
 
@@ -279,13 +286,15 @@ export function PeopleView({ active, people, onOpenInvite }: PeopleViewProps) {
         onToggleRowSelect={toggleRowSelect}
       />
 
-      <PeopleActionTray
-        selectedCount={selectedIds.size}
-        onExport={handleExportSelected}
-        onMessage={handleMessageSelected}
-        onArchive={handleArchiveSelected}
-        onClear={handleClearSelection}
-      />
+      {people.length > 0 && (
+        <PeopleActionTray
+          selectedCount={selectedIds.size}
+          onExport={handleExportSelected}
+          onMessage={handleMessageSelected}
+          onArchive={handleArchiveSelected}
+          onClear={handleClearSelection}
+        />
+      )}
     </div>
   );
 }

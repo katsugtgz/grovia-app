@@ -6,9 +6,12 @@ import { $, isReducedMotion } from '@/lib/motion';
 import { Icon } from '@/components/ui/Icon';
 import { triggerToast } from '@/lib/toast';
 import type { Person } from '@/lib/types';
-import { getAppearanceForSeed } from '@/lib/template-core';
-import { AVATAR_PALETTE } from '@/lib/data';
 import { InviteFormFields } from './InviteFormFields';
+import {
+  submitInvitePersonRequest,
+  validateInviteInput,
+  type InviteFieldErrors,
+} from './invite-helpers';
 
 export interface InviteModalProps {
   isOpen: boolean;
@@ -20,7 +23,6 @@ export interface InviteModalProps {
 export function InviteModal({
   isOpen,
   onClose,
-  existingEmails = [],
   onInvite,
 }: InviteModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -33,8 +35,18 @@ export function InviteModal({
   const [role, setRole] = useState('');
   const [team, setTeam] = useState('Engineering');
   const [city, setCity] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const [errors, setErrors] = useState<{ name?: string; email?: string; role?: string }>({});
+  const [errors, setErrors] = useState<InviteFieldErrors>({});
+  const dialogGenRef = useRef(0);
+  const wasOpenRef = useRef(false);
+  const isSubmittingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   const resetForm = () => {
     setName('');
@@ -43,6 +55,14 @@ export function InviteModal({
     setTeam('Engineering');
     setCity('');
     setErrors({});
+    setFormError(null);
+  };
+
+  const handleRequestClose = () => {
+    if (isSubmittingRef.current) return;
+    dialogGenRef.current += 1;
+    resetForm();
+    onCloseRef.current();
   };
 
   useEffect(() => {
@@ -52,14 +72,21 @@ export function InviteModal({
     let focusTimer: ReturnType<typeof setTimeout> | undefined;
 
     const handleDialogClick = (e: MouseEvent) => {
-      if (e.target === dialog) {
+      if (e.target === dialog && !isSubmittingRef.current) {
+        dialogGenRef.current += 1;
         resetForm();
-        onClose();
+        onCloseRef.current();
       }
     };
     dialog.addEventListener('click', handleDialogClick);
 
+    const transitionedToOpen = isOpen && !wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+
     if (isOpen) {
+      if (transitionedToOpen) {
+        dialogGenRef.current += 1;
+      }
       if (!dialog.open) {
         dialog.showModal();
         focusTimer = setTimeout(() => nameInputRef.current?.focus(), 50);
@@ -103,7 +130,7 @@ export function InviteModal({
       if (focusTimer) clearTimeout(focusTimer);
       dialog.removeEventListener('click', handleDialogClick);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   const shakeInput = (inputEl: HTMLElement | null) => {
     if (!inputEl || isReducedMotion()) return;
@@ -114,30 +141,28 @@ export function InviteModal({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     const cleanName = name.trim();
     const cleanEmail = email.trim().toLowerCase();
     const cleanRole = role.trim();
     const cleanCity = city.trim() || 'Remote';
 
-    const newErrors: { name?: string; email?: string; role?: string } = {};
+    const newErrors = validateInviteInput({
+      name: cleanName,
+      email: cleanEmail,
+      role: cleanRole,
+    });
 
-    if (cleanName.length < 2) {
-      newErrors.name = 'Enter their full name.';
+    if (newErrors.name) {
       shakeInput(nameInputRef.current);
     }
-
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail)) {
-      newErrors.email = 'Enter a valid email address.';
-      shakeInput(emailInputRef.current);
-    } else if (existingEmails.includes(cleanEmail)) {
-      newErrors.email = 'Someone with this email is already on the team.';
+    if (newErrors.email) {
       shakeInput(emailInputRef.current);
     }
-
-    if (!cleanRole) {
-      newErrors.role = 'Add their role.';
+    if (newErrors.role) {
       shakeInput(roleInputRef.current);
     }
 
@@ -156,26 +181,51 @@ export function InviteModal({
       return;
     }
 
-    const uniqueId = `n-${Date.now()}`;
-    const newPerson: Person = {
-      id: uniqueId,
-      name: cleanName,
-      email: cleanEmail,
-      role: cleanRole,
-      team,
-      city: cleanCity,
-      hireDate: new Date().toISOString().split('T')[0],
-      since: 'Invited today',
-      status: 'Invited',
-      av: AVATAR_PALETTE[Math.floor(Math.random() * AVATAR_PALETTE.length)],
-      rate: 40,
-      look: getAppearanceForSeed(cleanName),
-    };
+    const submitGen = dialogGenRef.current;
+    setFormError(null);
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+    try {
+      const result = await submitInvitePersonRequest({
+        name: cleanName,
+        email: cleanEmail,
+        role: cleanRole,
+        team,
+        city: cleanCity,
+      });
 
-    onInvite(newPerson);
-    triggerToast(`Invite sent to ${cleanEmail}`);
-    resetForm();
-    onClose();
+      if (!result.ok) {
+        if (result.status === 401 || result.unauthorized) {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login?next=/workspace';
+          }
+          return;
+        }
+
+        if (submitGen !== dialogGenRef.current) {
+          return;
+        }
+
+        if (result.duplicate || /email/i.test(result.error)) {
+          setErrors({ email: result.error });
+          shakeInput(emailInputRef.current);
+          emailInputRef.current?.focus();
+        } else {
+          setFormError(result.error);
+        }
+        return;
+      }
+
+      onInvite(result.person);
+      triggerToast(`Invite sent to ${result.person.email || cleanEmail}`);
+      if (submitGen === dialogGenRef.current) {
+        resetForm();
+        onClose();
+      }
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -186,8 +236,7 @@ export function InviteModal({
       ref={dialogRef}
       onCancel={(e) => {
         e.preventDefault();
-        resetForm();
-        onClose();
+        handleRequestClose();
       }}
     >
       <form
@@ -204,28 +253,45 @@ export function InviteModal({
             type="button"
             data-close
             aria-label="Close invite dialog"
-            onClick={onClose}
+            disabled={isSubmitting}
+            onClick={handleRequestClose}
           >
             <Icon name="x" className="ico" aria-hidden="true" />
           </button>
         </header>
 
+        {formError ? (
+          <div className="auth-alert" role="alert" aria-live="assertive">
+            {formError}
+          </div>
+        ) : null}
+
         <InviteFormFields
           name={name}
-          setName={setName}
+          setName={(v) => {
+            setName(v);
+            if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+          }}
           nameInputRef={nameInputRef}
           email={email}
-          setEmail={setEmail}
+          setEmail={(v) => {
+            setEmail(v);
+            if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+          }}
           emailInputRef={emailInputRef}
           role={role}
-          setRole={setRole}
+          setRole={(v) => {
+            setRole(v);
+            if (errors.role) setErrors((prev) => ({ ...prev, role: undefined }));
+          }}
           roleInputRef={roleInputRef}
           team={team}
           setTeam={setTeam}
           city={city}
           setCity={setCity}
           errors={errors}
-          onClose={onClose}
+          onClose={handleRequestClose}
+          isSubmitting={isSubmitting}
         />
       </form>
     </dialog>

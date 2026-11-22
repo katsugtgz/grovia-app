@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Full git history enables PR diff mapping for inline comments while `scope: full` scans the entire project to enforce a 100/100 zero-warning gate.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
